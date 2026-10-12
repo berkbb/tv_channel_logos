@@ -1,0 +1,99 @@
+# Development Guide
+
+## 1. Prerequisites
+
+- JDK 21, Android SDK with platform 37 (compileSdk 37.2) and build tools 36.
+- Gradle wrapper 9.7 / AGP 9.4 (Kotlin built into AGP, Compose compiler plugin 2.2.10).
+- `local.properties` with `sdk.dir=/path/to/Android/sdk` (not committed).
+- A TV with network debugging on (Settings → Developer options), reachable with `adb connect TV:5555`.
+
+## 2. Code map
+
+```
+app/src/main/java/com/babadogan/channellogos/
+├── MainActivity.kt              # Compose host; asks for the storage permission (USB logos)
+├── tool/TvLogoTool.java         # Runs ON the TV as the shell user (app_process); list / write
+├── tv/TvShell.kt                # dadb connection to localhost:5555, runs TvLogoTool, retries, refreshes the TV UI
+├── logos/NameMatcher.kt         # Name → key, channel keys (HD/SD/TV/TİCARİ variants), logo keys
+├── logos/LogoMatching.kt        # Ranking, safe matches, candidates for picking by hand
+├── logos/LogoSources.kt         # USB, TV table, GitHub, iptv-org sources; LogoImage (fit / drawn logo)
+├── backup/LogoBackups.kt        # Originals (for "Reset to Default") and the logo backup snapshot
+├── settings/AppSettings.kt      # Settings + SharedPreferences store
+└── ui/                          # MainViewModel, MainScreen (list, dialogs), Strings (TR/EN)
+```
+
+## 3. Talking to the TV
+
+The TV provider lets only the system and the shell (which holds `ACCESS_ALL_EPG_DATA`) change other
+inputs' channels. The app:
+
+1. connects to the TV's adbd with its own RSA key (`files/adb/adbkey`, the TV asks once);
+2. runs `app_process -Djava.class.path=<own APK> /system/bin com.babadogan.channellogos.tool.TvLogoTool …`;
+3. `TvLogoTool` reaches the TV provider like the `content` command does (`IActivityManager.getContentProviderExternal`
+   and the hidden `IContentProvider`), with arguments matched by type so Android 8 to 12 all work.
+
+Commands and output:
+
+| Command | Output |
+|---------|--------|
+| `list` | one line per channel: `id \t number \t name \t inputId \t logoBytes \t serviceType` |
+| `write ID PNG [ID PNG …]` | `OK id` or `FAIL id reason` per channel |
+| `dump ID [ID …]` | `id \t base64 PNG` for each channel that has a logo |
+| `remove ID [ID …]` | `OK id` or `FAIL id reason`; the channel is left without a logo |
+
+PNG paths must be readable by the shell: the app puts them in its external files directory
+(`/storage/emulated/0/Android/data/com.babadogan.channellogos/files/logos`). `adb push` is not used;
+on Android 8 adbd dropped the connection during sync transfers.
+
+After a write the Philips live TV app is restarted (`am force-stop org.droidtv.playtv`): it caches
+logos by URI (`ZapbarUtils: getBitmapFromUri() in cache`) and ignores the provider's change notice.
+`am kill` does not stop it (system service process).
+
+Try the helper by hand:
+
+```bash
+APK=$(adb shell pm path com.babadogan.channellogos | sed 's/package://')
+adb shell app_process -Djava.class.path=$APK /system/bin com.babadogan.channellogos.tool.TvLogoTool list | head
+```
+
+## 4. Logo sources and caches
+
+| Source | Where it comes from | Cached as |
+|--------|--------------------|-----------|
+| USB | `/storage/<volume>/…` (depth 3, ≤ 3000 images) | rescanned on every scan |
+| TV table | `com.example.tvcontentprovider` APK: `assets/Logos/ChannelLogoDatabase.db` + `assets/Logos/sys/<id>.png` | `files/tv-logo-index-<country>-<apk size>-<apk date>.tsv` |
+| GitHub | `api.github.com/repos/tv-logo/tv-logos/contents/countries/<folder>` | `files/github-<folder>.json` (1 day), images in `cache/github/` |
+| iptv-org | `iptv-org.github.io/api/logos.json` + `channels.json` (streamed, ~14 MB) | `files/iptv-org-<country>.tsv` (7 days), images in `cache/iptv/` |
+
+"Update Logos from the Internet" ignores the ages and drops the downloaded images.
+
+## 5. Matching rules
+
+- **Keys:** lowercase ASCII letters and digits; every Turkish i (I, İ, ı) becomes `i`, accents are
+  dropped, `&` → `and`, `+` → `plus`. A plain character loop: Normalizer and regex cost ~1 ms per
+  name on a TV CPU and the TV table has ~10,000 names.
+- **Channel keys, best first:** exact; without a trailing HD/SD/FHD/UHD/4K; then with/without a
+  trailing "tv". The word "TİCARİ" (commercial feed) is ignored.
+- **Logo keys:** each logo is filed under its key and, if it ends in a quality marker, without it.
+- **Ranking:** catalogue tier (TV's country 0, international 1, other 2) → closeness → source
+  (USB, TV, GitHub, iptv-org, drawn). The tier comes first: the international "ShowHD" is a
+  different channel from Turkey's "Show TV".
+- **Safe (preselected):** tier 0, not a loose match, source USB/TV/GitHub.
+
+## 6. Testing
+
+```bash
+./gradlew :app:testDebugUnitTest
+```
+
+Unit tests cover name keys, matching and ranking (with the real-world cases above) and that every
+UI text exists in both languages. On the TV, measure with the **release** build: a debuggable build
+runs several times slower (the TV table took 13 s instead of 0.5 s).
+
+Useful logcat filter: `adb logcat ChannelLogos:V AndroidRuntime:E '*:S'`.
+
+## 7. Localization
+
+All texts live in `ui/Strings.kt` as `t(turkish, english)` getters; the language is Compose state,
+so changing it in Settings redraws at once. Add new texts to both languages; `StringsTest` fails if
+one is blank or if a text is accidentally the same in both (proper names are listed there).
