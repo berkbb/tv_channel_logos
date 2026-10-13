@@ -16,8 +16,21 @@ data class Channel(
     val inputId: String,
     val hasLogo: Boolean,
     /** A radio station (audio-only service); these rarely have logos anywhere. */
-    val isRadio: Boolean = false
+    val isRadio: Boolean = false,
+    /**
+     * The DVB service as "SID_TSID_ONID" in uppercase hex, the way picons' service references
+     * write it ("2BD_8_1"); null when the TV provider has no broadcast IDs for the channel.
+     */
+    val serviceKey: String? = null
 )
+
+/** [Channel.serviceKey] from the provider's decimal IDs; null for channels without DVB IDs. */
+internal fun serviceKey(onid: String?, tsid: String?, sid: String?): String? {
+    val ids = listOf(sid, tsid, onid).map { it?.toIntOrNull() ?: 0 }
+    // Analogue and IP channels have no service or original network ID (0 in the provider).
+    if (ids[0] <= 0 || ids[2] <= 0) return null
+    return ids.joinToString("_") { Integer.toHexString(it).uppercase() }
+}
 
 /**
  * Shell access to this TV through its own adbd ("network debugging", localhost:5555). The shell
@@ -60,7 +73,8 @@ class TvShell(private val context: Context) : AutoCloseable {
                     name = fields[2],
                     inputId = fields[3],
                     hasLogo = (fields[4].toLongOrNull() ?: 0L) > 0L,
-                    isRadio = fields.getOrNull(5) == "SERVICE_TYPE_AUDIO"
+                    isRadio = fields.getOrNull(5) == "SERVICE_TYPE_AUDIO",
+                    serviceKey = serviceKey(fields.getOrNull(6), fields.getOrNull(7), fields.getOrNull(8))
                 )
             }
             .filter { channel ->

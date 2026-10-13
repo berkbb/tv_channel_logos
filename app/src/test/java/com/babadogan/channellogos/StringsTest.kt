@@ -23,23 +23,36 @@ class StringsTest {
     }
 
     @Test
-    fun everyTextExistsInBothLanguages() {
-        val turkish = texts("tr")
-        val english = texts("en")
-        assertTrue("expected many texts, found ${turkish.size}", turkish.size > 50)
-        assertEquals(turkish.keys, english.keys)
-        for ((name, text) in turkish) {
-            assertTrue("$name is blank in Turkish", text.isNotBlank())
-            assertTrue("$name is blank in English", english.getValue(name).isNotBlank())
+    fun everyTextExistsInEveryLanguage() {
+        val byLanguage = Strings.LANGUAGES.associateWith { texts(it) }
+        val english = byLanguage.getValue("en")
+        assertTrue("expected many texts, found ${english.size}", english.size > 50)
+        for ((language, texts) in byLanguage) {
+            assertEquals(english.keys, texts.keys)
+            for ((name, text) in texts) assertTrue("$name is blank in $language", text.isNotBlank())
         }
-        // Proper names aside, the two languages really differ
-        val same = turkish.filter { (name, text) -> english[name] == text }.keys
-        assertEquals(setOf("getSourceTv", "getSourceGitHub", "getSourceIptv", "getSourceFile", "getAboutCompany"), same)
+        // Proper names and words the languages share aside, every two languages really differ
+        val properNames = setOf("getSourceTv", "getSourceGitHub", "getSourcePicons", "getSourceIptv", "getSourceFile", "getAboutCompany")
+        val sharedWords = mapOf(("ro" to "tr") to setOf("getLanguageSystem")) // "Sistem"
+        for (a in Strings.LANGUAGES) for (b in Strings.LANGUAGES) {
+            if (a >= b) continue
+            val same = byLanguage.getValue(a).filter { (name, text) -> byLanguage.getValue(b)[name] == text }.keys -
+                properNames - sharedWords[a to b].orEmpty()
+            assertEquals("same text in $a and $b", emptySet<String>(), same)
+        }
+    }
+
+    @Test
+    fun anUnknownLanguageFallsBackToEnglish() {
+        Strings.setLanguage("de")
+        val german = Strings.settings
+        Strings.setLanguage("en")
+        assertEquals(Strings.settings, german)
     }
 
     @Test
     fun parameterizedTextsCarryTheirValues() {
-        for (language in listOf("tr", "en")) {
+        for (language in Strings.LANGUAGES) {
             Strings.setLanguage(language)
             assertTrue(Strings.channelStats(589, 85, 194).contains("589"))
             assertTrue(Strings.apply(12).contains("12"))

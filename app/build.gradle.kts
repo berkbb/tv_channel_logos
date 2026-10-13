@@ -70,6 +70,8 @@ dependencies {
         exclude(group = "org.opentest4j")
         exclude(group = "org.apiguardian")
     }
+    // Draws picons' SVG logos into bitmaps (Android has no SVG decoder)
+    implementation(libs.androidsvg)
 
     testImplementation(libs.junit)
 }

@@ -5,7 +5,7 @@ import androidx.core.content.edit
 
 /** The user's choices, kept across launches. */
 data class Settings(
-    /** "system", "tr" or "en". */
+    /** "system", "tr", "en" or "ro". */
     val language: String = LANGUAGE_SYSTEM,
     /** "system", "dark" or "light". */
     val theme: String = THEME_SYSTEM,
@@ -14,6 +14,7 @@ data class Settings(
     /** Offer a logo drawn from the name for channels no catalogue knows. */
     val textLogos: Boolean = true,
     val gitHub: Boolean = true,
+    val picons: Boolean = true,
     val iptv: Boolean = true,
     val usb: Boolean = true
 ) {
@@ -34,6 +35,7 @@ class SettingsStore(context: Context) {
         preselectSafe = prefs.getBoolean("preselect_safe", true),
         textLogos = prefs.getBoolean("text_logos", true),
         gitHub = prefs.getBoolean("source_github", true),
+        picons = prefs.getBoolean("source_picons", true),
         iptv = prefs.getBoolean("source_iptv", true),
         usb = prefs.getBoolean("source_usb", true)
     )
@@ -44,6 +46,7 @@ class SettingsStore(context: Context) {
         putBoolean("preselect_safe", settings.preselectSafe)
         putBoolean("text_logos", settings.textLogos)
         putBoolean("source_github", settings.gitHub)
+        putBoolean("source_picons", settings.picons)
         putBoolean("source_iptv", settings.iptv)
         putBoolean("source_usb", settings.usb)
     }

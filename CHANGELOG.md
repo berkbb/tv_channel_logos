@@ -9,14 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **picons source** ([picons/picons](https://github.com/picons/picons), GPL-3.0, downloaded on the
+  TV, not bundled): logos linked to DVB services. `TvLogoTool list` now also prints each channel's
+  original network, transport stream and service ID; a picon linked to the channel's own service
+  (`SID_TSID_ONID`, Türksat 42°E preferred when satellites disagree) is preselected if its name
+  agrees with the channel's. picons' service-name index is a non-preselected fallback. SVG logos
+  are drawn with AndroidSVG. Can be turned off in Settings.
+
 ### Known issues
 - Only TVs with plain network debugging (port 5555) can be reached; Android 11+ "Wireless
   debugging" needs pairing, which is not implemented yet (see ROADMAP.md).
 - The logo cache refresh after writing knows only the Philips live TV app; on other brands a
   replaced logo may show its old picture until the TV restarts.
 
-### Ideas
-- Arçelik's logo service as a fourth source (ROADMAP.md).
+- **Romanian** UI language (Settings → Language → Română, or a TV set to Romanian), with the app
+  name "Logo-uri canale".
+
+### Notes
+- Arçelik (MediaTek) TVs were checked as a logo source: they show and store no broadcast-channel
+  logos, and their shell lacks `ACCESS_ALL_EPG_DATA` (ROADMAP.md).
 
 ---
 

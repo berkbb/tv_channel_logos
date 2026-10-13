@@ -1,33 +1,34 @@
 # Roadmap and open ideas
 
-## Next: Arçelik's logo service as a fourth source
+## Next: more logo sources for Turkish channels
 
-**Observation (12 October 2026):** an Arçelik Android 11 TV on the same network shows channel logos
-that the Philips TPM171E lacks. Philips only has the logo table frozen in its 2021 firmware; Arçelik
-apparently keeps its logos up to date, most likely from its own server.
+The tv-logo/tv-logos Turkey folder (302 files) and iptv-org (435 TR channels) leave gaps, mostly
+regional and smaller national channels. Candidates checked on 13 October 2026:
 
-**Idea:** find where Arçelik's TV gets its logos (server and address pattern) and, if it can be
-queried by channel name or broadcast IDs, add it as a source next to the TV table, GitHub, iptv-org
-and USB.
+| Source | What it offers | Verdict |
+|--------|----------------|---------|
+| [picons/picons](https://github.com/picons/picons) (`build-source/`) | ~17,800 files; `srp.index` maps `SID_TSID_ONID_namespace` to a logo name, 518 entries / 353 logos for Türksat 42E (`_1A40000`); `snp.index` maps service names | **Best next source.** GPL-3.0, so download on the TV like GitHub, don't bundle. Match by the DVB triplet (`service_id`, `transport_stream_id`, `original_network_id` columns in TvProvider) before names. 42E service refs are spotty for the big channels (Show, ATV, Kanal D missing from `srp.index`), so keep `snp.index` + name keys as fallback. Logos are SVG or PNG, often with `.light`/`.dark` variants. |
+| Türksat frequency list (`turksat.com.tr/uydu/yayincilik-hizmetleri/turksat-frekans-listesi?page=0..15`) | 751 rows (TV + radio), name, frequency, polarisation, SR, FEC, V-PID/A-PID, satellite; 191 rows carry an inline base64 PNG (`img.kanal-logo`, `alt` = channel name), 154 unique | Official names, but 144 of the logos are 52×39 thumbnails (Show, Star, Kanal D, TV8, TRT 1…). Only ~40 are large (TRT channels 1001×1001, TV100, CNBC-e, Bengü Türk). No service IDs. Useful as a last-resort tier and as a name list for matching; scraping HTML is fragile. |
+| Türksat Kablo channel PDF | 155 images, 147 of them 80×60, no names attached to images | Not usable. |
+| Wikidata (`P154` logo, country Turkey) | 25 TV channels | Too thin. |
+| LyngSat Logo, MediaPortal "Türksat Logo Pack" | large sets | Copyrighted collection / outdated (Türksat 2A/3A era). Skip. |
+| TKGS (Türksat channel update system) | channel list over the satellite | Carries no logos (the "TKGS LOGO" strings in MediaTek LiveTV are only debug tags). |
 
-**State:** the Arçelik TV (192.168.50.216) has network debugging enabled (port 5555 open); the
-first `adb connect` is waiting for the "Allow USB debugging?" approval on that TV.
+**picons: implemented (unreleased).** Still to check on the Philips TPM171E: that its TV provider
+fills `service_id`/`transport_stream_id`/`original_network_id` (look at the last three columns of
+`TvLogoTool list`); if they are 0 there, only the name fallback works. Also compare how picons'
+`default` logos look on Philips' channel bar next to the built-in ones (picons also has `light`
+variants).
 
-**Steps:**
-1. `adb connect 192.168.50.216:5555` and approve on the Arçelik TV ("Always allow").
-2. Find the app that owns the channel logos:
-   `adb shell content query --uri content://android.media.tv/channel --projection _id:display_name:input_id:package_name`
-   and which process writes them (`adb logcat | grep -i logo` during a channel update).
-3. Look for the logo URLs: the channel rows' `internal_provider_data` and `app_link_*` columns,
-   the owner app's own databases/preferences (if readable), its network requests in logcat, or its
-   APK (`adb shell pm path <package>`, then look for URL patterns in the dex/resources).
-4. Check how a logo is addressed (channel name, service ID, ONID/TSID/SID, an internal ID) and
-   whether the service answers requests from other devices.
-5. If usable: add an `ArcelikLogoSource` (catalogue tier like GitHub's country folder), cache like
-   the other online sources, and a setting to turn it off.
+## Closed: Arçelik as a logo source
 
-**Caution:** this is likely an undocumented service run for Arçelik's own devices. Before shipping
-it, check its terms; keep it opt-in and for the owner's personal use, like the other sources.
+**Checked 13 October 2026** over adb (Arçelik Android 11, MediaTek m7322): the TV has no
+broadcast-channel logos to borrow. MediaTek LiveTV (`com.mediatek.wwtv.tvcenter`) shows no logos in
+the channel list or EPG in the EU region, the Channel Editor (`com.arcelik.ChannelEditor`) lists
+number + name only, and nothing writes `channel/<id>/logo`. The home-screen "Live TV" row uses tiles
+that `com.mediatek.tv.service` draws from the channel number, name and programme — probably what
+looked like logos on 12 October. The shell user also lacks `ACCESS_ALL_EPG_DATA` there, so the
+app's `TvLogoTool` route cannot list or write channels on this TV.
 
 ## Reaching more TVs
 

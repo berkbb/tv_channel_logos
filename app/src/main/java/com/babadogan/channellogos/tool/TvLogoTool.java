@@ -20,7 +20,7 @@ import java.lang.reflect.Method;
  *
  * <pre>
  * app_process -Djava.class.path=APK /system/bin com.babadogan.channellogos.tool.TvLogoTool list
- *   → one line per channel: id \t number \t name \t inputId \t logoBytes \t serviceType
+ *   → one line per channel: id \t number \t name \t inputId \t logoBytes \t serviceType \t onid \t tsid \t sid
  * ... TvLogoTool write ID PNG [ID PNG ...]
  *   → "OK id" or "FAIL id reason" per channel
  * ... TvLogoTool dump ID [ID ...]
@@ -94,7 +94,8 @@ public final class TvLogoTool {
 
     private static void list(Object provider) throws Exception {
         Uri uri = Uri.parse("content://" + AUTHORITY + "/channel");
-        String[] projection = {"_id", "display_number", "display_name", "input_id", "service_type"};
+        String[] projection = {"_id", "display_number", "display_name", "input_id", "service_type",
+                "original_network_id", "transport_stream_id", "service_id"};
         Cursor cursor = (Cursor) invoke(provider, "query", uri, projection, "r");
         if (cursor == null) return;
         try {
@@ -102,7 +103,8 @@ public final class TvLogoTool {
                 long id = cursor.getLong(0);
                 System.out.println(id + "\t" + clean(cursor.getString(1)) + "\t" + clean(cursor.getString(2))
                         + "\t" + clean(cursor.getString(3)) + "\t" + logoSize(provider, id)
-                        + "\t" + clean(cursor.getString(4)));
+                        + "\t" + clean(cursor.getString(4))
+                        + "\t" + cursor.getInt(5) + "\t" + cursor.getInt(6) + "\t" + cursor.getInt(7));
             }
         } finally {
             cursor.close();

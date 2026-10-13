@@ -2,7 +2,7 @@
 
 An Android TV app that finds the channels without a logo in the TV's channel list, suggests a
 fitting logo and writes it into the TV's channel database. Built and tested on a Philips (TP Vision)
-TPM171E running Android 8.0; UI in Turkish and English.
+TPM171E running Android 8.0; UI in Turkish, English and Romanian.
 
 ## How it works
 
@@ -25,18 +25,20 @@ in memory and would keep showing the old picture of a replaced logo.
 | USB | PNG/JPEG/WebP files on a USB stick, matched by file name | preferred, treated as safe |
 | TV table | logos built into Philips firmware (`tvcontentprovider.apk`) | read-only, fixed at the firmware's date |
 | GitHub | [tv-logo/tv-logos](https://github.com/tv-logo/tv-logos), country + international/UK/US folders | no license: downloaded on the TV for personal use, nothing bundled |
+| picons | [picons/picons](https://github.com/picons/picons), logos linked to DVB services (SID/TSID/ONID) and service names | GPL-3.0: downloaded on the TV, nothing bundled; a service match whose name agrees is preselected |
 | iptv-org | [iptv-org](https://github.com/iptv-org/database) channel database (public domain) | logo links to many hosts; never preselected |
 | Drawn | the channel name drawn on a tile | for channels no source knows; never preselected |
 
 Names are compared as keys (lowercase ASCII, Turkish letters folded, "HD/SD/TİCARİ" handled).
 Logos from the TV's own country rank first; only close matches from USB, the TV table and GitHub's
-country folder are preselected, everything else is marked "check".
+country folder, and picons linked to the channel's own broadcast IDs, are preselected; everything
+else is marked "check".
 
 ## Build
 
 ```bash
 ./gradlew :app:assembleRelease      # app/build/outputs/apk/release/app-release.apk
-./gradlew :app:testDebugUnitTest    # name matching, ranking, both languages
+./gradlew :app:testDebugUnitTest    # name matching, ranking, all three languages
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
@@ -50,4 +52,4 @@ private channel databases are not handled yet.
 ## License
 
 MIT. Channel names and logos are trademarks of their owners; this independent project is not
-affiliated with Philips, TP Vision, Google, the broadcasters, tv-logo or iptv-org.
+affiliated with Philips, TP Vision, Google, the broadcasters, tv-logo, picons or iptv-org.

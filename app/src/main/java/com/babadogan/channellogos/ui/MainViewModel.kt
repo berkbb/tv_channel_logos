@@ -11,6 +11,7 @@ import com.babadogan.channellogos.logos.BuiltInLogoSource
 import com.babadogan.channellogos.logos.Country
 import com.babadogan.channellogos.logos.GitHubLogoSource
 import com.babadogan.channellogos.logos.IptvOrgSource
+import com.babadogan.channellogos.logos.PiconsSource
 import com.babadogan.channellogos.logos.UsbLogoSource
 import com.babadogan.channellogos.logos.LogoEntry
 import com.babadogan.channellogos.logos.LogoCandidate
@@ -54,6 +55,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val busy: Boolean = false,
         val tvLogos: Int = 0,
         val gitHubLogos: Int = 0,
+        val piconsLogos: Int = 0,
         val iptvLogos: Int = 0,
         val usbLogos: Int = 0,
         /** When the online catalogues were last downloaded (epoch ms, 0 if never). */
@@ -76,6 +78,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val shell = TvShell(application)
     private val builtIn = BuiltInLogoSource(application)
     private val gitHub = GitHubLogoSource(application)
+    private val picons = PiconsSource(application)
     private val iptv = IptvOrgSource(application)
     private val usb = UsbLogoSource()
     private val backups = LogoBackups(application)
@@ -202,7 +205,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun candidatesFor(channel: Channel): List<LogoCandidate> =
-        LogoMatching.candidates(channel.name, catalogs())
+        LogoMatching.candidates(channel.name, catalogs(), channel.serviceKey)
 
     /** Every image on the USB stick for [channel], those named like it first. */
     fun usbCandidatesFor(channel: Channel): List<LogoCandidate> {
@@ -336,7 +339,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         shell.close()
     }
 
-    /** Downloads the GitHub and iptv-org catalogues again (and drops cached logo images), then re-matches. */
+    /** Downloads the GitHub, picons and iptv-org catalogues again (and drops cached logo images), then re-matches. */
     fun refreshSources() {
         if (_state.value.busy) return
         viewModelScope.launch {
@@ -358,14 +361,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val gitHubLoaded = runCatching { gitHub.load(country, refresh) }.onFailure { Log.w(TAG, "GitHub logos", it) }.isSuccess
             Log.i(TAG, "GitHub logos: ${gitHub.size} keys in ${System.currentTimeMillis() - t0} ms")
             t0 = System.currentTimeMillis()
+            runCatching { picons.load(country, refresh) }.onFailure { Log.w(TAG, "picons", it) }
+            Log.i(TAG, "picons: ${picons.services().size} services, ${picons.entries().size} name keys in ${System.currentTimeMillis() - t0} ms")
+            t0 = System.currentTimeMillis()
             runCatching { iptv.load(country, refresh) }.onFailure { Log.w(TAG, "iptv-org logos", it) }
             Log.i(TAG, "iptv-org logos: ${iptv.size} keys in ${System.currentTimeMillis() - t0} ms")
             _state.update {
                 it.copy(
                     tvLogos = builtIn.size,
                     gitHubLogos = gitHub.size,
+                    piconsLogos = picons.size,
                     iptvLogos = iptv.size,
-                    sourcesUpdatedAt = maxOf(gitHub.updatedAt(country), iptv.updatedAt(country)),
+                    sourcesUpdatedAt = maxOf(gitHub.updatedAt(country), picons.updatedAt(), iptv.updatedAt(country)),
                     tvTableMissing = !builtIn.available,
                     gitHubFailed = !gitHubLoaded
                 )
@@ -378,7 +385,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val catalogs = catalogs()
         for (channel in channels) {
             // A channel no catalogue knows is offered a logo drawn from its name.
-            val best = LogoMatching.best(channel.name, catalogs)
+            val best = LogoMatching.best(channel.name, catalogs, channel.serviceKey)
                 ?: if (settings.textLogos) LogoMatching.textLogo(channel.name) else null
             best?.let { result[channel.id] = it }
         }
@@ -391,6 +398,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             files = if (settings.usb) usb.entries() else emptyMap(),
             tv = builtIn.entries(),
             gitHub = if (settings.gitHub) gitHub.entries() else emptyMap(),
+            picons = if (settings.picons) picons.entries() else emptyMap(),
+            piconServices = if (settings.picons) picons.services() else emptyMap(),
             iptv = if (settings.iptv) iptv.entries() else emptyMap()
         )
     }
@@ -400,6 +409,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return when (candidate.source) {
             LogoSource.TV -> builtIn.read(ref.toInt())
             LogoSource.GITHUB -> gitHub.read(ref)
+            LogoSource.PICONS -> picons.read(ref)
             LogoSource.IPTV -> iptv.read(ref)
             LogoSource.TEXT -> LogoImage.text(candidate.name)
             LogoSource.FILE -> usb.read(ref)

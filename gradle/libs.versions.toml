@@ -8,6 +8,7 @@ activityCompose = "1.9.3"
 composeBom = "2024.10.00"
 coroutines = "1.9.0"
 dadb = "1.2.9"
+androidsvg = "1.4"
 junit = "4.13.2"
 
 [libraries]
@@ -21,6 +22,7 @@ androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 dadb = { group = "dev.mobile", name = "dadb", version.ref = "dadb" }
+androidsvg = { group = "com.caverock", name = "androidsvg-aar", version.ref = "androidsvg" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]

@@ -23,6 +23,8 @@ enum class LogoSource {
     TV,
     /** github.com/tv-logo/tv-logos */
     GITHUB,
+    /** github.com/picons/picons: logos linked to DVB services and service names */
+    PICONS,
     /** iptv-org's channel database (logo links to many hosts) */
     IPTV,
     /** Drawn by this app from the channel name, when no logo exists anywhere */
@@ -232,6 +234,101 @@ class GitHubLogoSource(private val context: Context) {
         const val REPO = "tv-logo/tv-logos"
         val EXTRA_FOLDERS = listOf("international" to "int", "united-kingdom" to "uk", "united-states" to "us")
         const val LISTING_MAX_AGE_MS = 24 * 60 * 60 * 1000L
+    }
+}
+
+/**
+ * Logos from github.com/picons/picons (GPL-3.0, so downloaded on the TV, never bundled). Its
+ * `srp.index` links DVB services ("SID_TSID_ONID_NAMESPACE" → logo name) and `snp.index` service
+ * names to logos; the logos themselves are SVG or PNG files in `build-source/logos`.
+ */
+class PiconsSource(private val context: Context) {
+
+    /** Name key → logo name. */
+    private val byKey = HashMap<String, LogoEntry<String>>()
+    /** "SID_TSID_ONID" → logo name. */
+    private val byService = HashMap<String, String>()
+
+    val size: Int get() = byService.size + byKey.size
+
+    fun load(country: Country, refresh: Boolean = false) {
+        byKey.clear()
+        byService.clear()
+        if (refresh) File(context.cacheDir, "picons").deleteRecursively()
+        val services = parseIndex(index("srp.index", refresh))
+        byService += servicesFor(services, PREFERRED_NAMESPACES[country.isoCode])
+        // Service names come from every satellite and country, so they are only a fallback.
+        for ((name, logo) in parseIndex(index("snp.index", refresh))) {
+            for (key in NameMatcher.logoKeys(name)) byKey.putIfAbsent(key, LogoEntry(logo, LogoEntry.INTERNATIONAL))
+        }
+    }
+
+    fun entries(): Map<String, LogoEntry<String>> = byKey
+
+    fun services(): Map<String, String> = byService
+
+    /** When the indexes were last downloaded (0 if never). */
+    fun updatedAt(): Long = File(context.filesDir, "picons-srp.index").lastModified()
+
+    /** The logo [name] as PNG: the PNG file if there is one, else the SVG drawn into a bitmap. */
+    fun read(name: String): ByteArray {
+        val cached = File(File(context.cacheDir, "picons"), "$name.png")
+        if (cached.exists()) return cached.readBytes()
+        val png = runCatching { httpGet("$RAW/build-source/logos/$name.default.png") }.getOrNull()
+            ?: LogoImage.fromSvg(httpGet("$RAW/build-source/logos/$name.default.svg"))
+        cached.parentFile?.mkdirs()
+        cached.writeBytes(png)
+        return png
+    }
+
+    private fun index(name: String, refresh: Boolean): List<String> {
+        val cache = File(context.filesDir, "picons-$name")
+        if (!refresh && cache.exists() && System.currentTimeMillis() - cache.lastModified() < INDEX_MAX_AGE_MS) return cache.readLines()
+        return runCatching {
+            httpGet("$RAW/build-source/$name").also { cache.writeBytes(it) }.toString(Charsets.UTF_8).lines()
+        }.getOrElse { if (cache.exists()) cache.readLines() else throw it }
+    }
+
+    companion object {
+        private const val RAW = "https://raw.githubusercontent.com/picons/picons/master"
+        private const val INDEX_MAX_AGE_MS = 24 * 60 * 60 * 1000L
+
+        /**
+         * Satellite namespaces (orbital position) whose services win when the same IDs are used
+         * on several satellites: the TV provider does not say which satellite a channel is on.
+         */
+        private val PREFERRED_NAMESPACES = mapOf("TR" to "1A40000") // Türksat 42°E
+
+        /** "key=value" lines; comments and malformed lines are skipped. */
+        internal fun parseIndex(lines: List<String>): List<Pair<String, String>> = lines.mapNotNull { line ->
+            val separator = line.indexOf('=')
+            if (separator <= 0 || line.startsWith("#")) null
+            else line.substring(0, separator).trim() to line.substring(separator + 1).trim()
+        }
+
+        /**
+         * "SID_TSID_ONID" → logo name from service references "SID_TSID_ONID_NAMESPACE". When
+         * satellites disagree about a service, [preferredNamespace]'s logo is used; if none of
+         * them is preferred, the service is left out rather than guessed.
+         */
+        internal fun servicesFor(references: List<Pair<String, String>>, preferredNamespace: String?): Map<String, String> {
+            val byIds = LinkedHashMap<String, MutableList<Pair<String, String>>>()
+            for ((reference, logo) in references) {
+                val parts = reference.uppercase().split('_')
+                if (parts.size != 4) continue
+                byIds.getOrPut("${parts[0]}_${parts[1]}_${parts[2]}") { ArrayList() } += parts[3] to logo
+            }
+            val result = HashMap<String, String>()
+            for ((ids, logos) in byIds) {
+                val preferred = logos.filter { it.first == preferredNamespace }.map { it.second }.distinct()
+                val all = logos.map { it.second }.distinct()
+                when {
+                    preferred.size == 1 -> result[ids] = preferred[0]
+                    preferred.isEmpty() && all.size == 1 -> result[ids] = all[0]
+                }
+            }
+            return result
+        }
     }
 }
 
@@ -453,6 +550,26 @@ object LogoImage {
         Canvas(out).drawBitmap(source, null, RectF(left, top, left + width, top + height), Paint(Paint.FILTER_BITMAP_FLAG))
         return png(out)
     }
+
+    /** An SVG logo drawn into a PNG whose longer side is [SVG_SIZE] px; [fit] shrinks it later. */
+    fun fromSvg(svgBytes: ByteArray): ByteArray {
+        val svg = com.caverock.androidsvg.SVG.getFromInputStream(svgBytes.inputStream())
+        val box = svg.documentViewBox
+            ?: RectF(0f, 0f, svg.documentWidth.takeIf { it > 0 } ?: SVG_SIZE.toFloat(), svg.documentHeight.takeIf { it > 0 } ?: SVG_SIZE.toFloat())
+        check(box.width() > 0 && box.height() > 0) { "SVG without a size" }
+        val scale = SVG_SIZE / maxOf(box.width(), box.height())
+        val width = (box.width() * scale).toInt().coerceAtLeast(1)
+        val height = (box.height() * scale).toInt().coerceAtLeast(1)
+        // With a view box set, the document size scales the drawing instead of cropping it.
+        svg.setDocumentViewBox(box.left, box.top, box.width(), box.height())
+        svg.setDocumentWidth(width.toFloat())
+        svg.setDocumentHeight(height.toFloat())
+        val out = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        svg.renderToCanvas(Canvas(out))
+        return png(out)
+    }
+
+    private const val SVG_SIZE = 400
 
     /**
      * A logo drawn from the channel's name, for channels no catalogue knows: bold dark text on a

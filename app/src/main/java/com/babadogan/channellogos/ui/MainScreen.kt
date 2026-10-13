@@ -170,7 +170,7 @@ private fun SidePanel(
                     if (state.channels.isNotEmpty()) {
                         Text(Strings.channelStats(state.channels.size, state.withLogo, state.radios), color = TextPrimary, fontSize = 14.sp)
                     }
-                    Text(Strings.sourceStats(state.tvLogos, state.gitHubLogos, state.iptvLogos), color = TextSecondary, fontSize = 13.sp)
+                    Text(Strings.sourceStats(state.tvLogos, state.gitHubLogos, state.piconsLogos, state.iptvLogos), color = TextSecondary, fontSize = 13.sp)
                     if (state.usbLogos > 0) Text(Strings.usbStats(state.usbLogos), color = TextSecondary, fontSize = 13.sp)
                     if (state.sourcesUpdatedAt > 0L) {
                         val date = remember(state.sourcesUpdatedAt) {
@@ -506,7 +506,7 @@ private fun SettingsDialog(settings: Settings, onChange: (Settings) -> Unit, onD
     TvDialog(title = Strings.settings, onDismiss = onDismiss) {
         SettingTitle(Strings.language)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            for ((code, label) in listOf(Settings.LANGUAGE_SYSTEM to Strings.languageSystem, "tr" to "Türkçe", "en" to "English")) {
+            for ((code, label) in listOf(Settings.LANGUAGE_SYSTEM to Strings.languageSystem, "tr" to "Türkçe", "en" to "English", "ro" to "Română")) {
                 TvButton(label, selected = settings.language == code, onClick = { onChange(settings.copy(language = code)) })
             }
         }
@@ -536,6 +536,7 @@ private fun SettingsDialog(settings: Settings, onChange: (Settings) -> Unit, onD
         SettingTitle(Strings.sources)
         for ((label, value, update) in listOf(
             Triple("GitHub", settings.gitHub) { on: Boolean -> settings.copy(gitHub = on) },
+            Triple("picons", settings.picons) { on: Boolean -> settings.copy(picons = on) },
             Triple("iptv-org", settings.iptv) { on: Boolean -> settings.copy(iptv = on) },
             Triple("USB", settings.usb) { on: Boolean -> settings.copy(usb = on) }
         )) {
@@ -688,6 +689,7 @@ private fun TvButton(
 private fun sourceLabel(candidate: LogoCandidate) = when (candidate.source) {
     LogoSource.TV -> Strings.sourceTv
     LogoSource.GITHUB -> Strings.sourceGitHub
+    LogoSource.PICONS -> Strings.sourcePicons
     LogoSource.IPTV -> Strings.sourceIptv
     LogoSource.TEXT -> Strings.sourceText
     LogoSource.FILE -> Strings.sourceFile

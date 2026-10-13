@@ -119,4 +119,40 @@ class LogoMatchingTest {
         assertEquals("tv:5209", LogoMatching.candidates("ATV HD", catalogs).first().id)
         assertEquals("tv:5184", LogoMatching.candidates("SHOW HD", catalogs).first().id)
     }
+
+    // picons: Türksat services ("SID_TSID_ONID") and service names from every satellite
+    private val withPicons = Catalogs(
+        tv = catalogs.tv, gitHub = catalogs.gitHub, iptv = catalogs.iptv,
+        picons = mapOf(
+            "tarimormanekrani" to LogoEntry("tarimormanekrani", INTERNATIONAL),
+            "showtv" to LogoEntry("showtv", INTERNATIONAL)
+        ),
+        piconServices = mapOf("2BD_8_1" to "tarimormanekrani", "1A_2_1" to "kanal7")
+    )
+
+    @Test
+    fun aPiconLinkedToTheChannelsServiceIsSafe() {
+        val best = LogoMatching.best("TARIM ORMAN EKRANI HD", withPicons, serviceKey = "2BD_8_1")!!
+        assertEquals("picons:tarimormanekrani", best.id)
+        assertEquals(COUNTRY, best.tier)
+        assertTrue(LogoMatching.isSafe(best))
+    }
+
+    @Test
+    fun aPiconMatchedOnlyByNameIsAFallback() {
+        // Without service IDs the name index finds it, but names from other satellites are not trusted
+        val best = LogoMatching.best("TARIM ORMAN EKRANI HD", withPicons)!!
+        assertEquals("picons:tarimormanekrani", best.id)
+        assertFalse(LogoMatching.isSafe(best))
+        // The TV's own Turkish logo still wins over a picon found by name
+        assertEquals("tv:5184", LogoMatching.best("SHOW TV", withPicons)!!.id)
+    }
+
+    @Test
+    fun aServicePiconWithAnUnrelatedNameIsOnlyOffered() {
+        // The service now carries another channel than the one picons knows it for
+        assertEquals("tv:5209", LogoMatching.best("ATV HD", withPicons, serviceKey = "1A_2_1")!!.id)
+        val picon = LogoMatching.candidates("ATV HD", withPicons, serviceKey = "1A_2_1").single { it.id == "picons:kanal7" }
+        assertFalse(LogoMatching.isSafe(picon))
+    }
 }
