@@ -18,7 +18,35 @@ data class Settings(
     val iptv: Boolean = true,
     val usb: Boolean = true
 ) {
+    /** The settings as "key" → "value", for a backup file; [fromMap] reads them back. */
+    fun toMap(): Map<String, String> = mapOf(
+        "language" to language,
+        "theme" to theme,
+        "preselect_safe" to preselectSafe.toString(),
+        "text_logos" to textLogos.toString(),
+        "source_github" to gitHub.toString(),
+        "source_picons" to picons.toString(),
+        "source_iptv" to iptv.toString(),
+        "source_usb" to usb.toString()
+    )
+
     companion object {
+        /** Settings from [toMap]'s keys; missing or unknown values keep the defaults. */
+        fun fromMap(map: Map<String, String>): Settings {
+            val defaults = Settings()
+            fun flag(key: String, default: Boolean) = map[key]?.toBooleanStrictOrNull() ?: default
+            return Settings(
+                language = map["language"]?.takeIf { it == LANGUAGE_SYSTEM || it in listOf("tr", "en", "ro") } ?: defaults.language,
+                theme = map["theme"]?.takeIf { it in listOf(THEME_SYSTEM, THEME_DARK, THEME_LIGHT) } ?: defaults.theme,
+                preselectSafe = flag("preselect_safe", defaults.preselectSafe),
+                textLogos = flag("text_logos", defaults.textLogos),
+                gitHub = flag("source_github", defaults.gitHub),
+                picons = flag("source_picons", defaults.picons),
+                iptv = flag("source_iptv", defaults.iptv),
+                usb = flag("source_usb", defaults.usb)
+            )
+        }
+
         const val LANGUAGE_SYSTEM = "system"
         const val THEME_SYSTEM = "system"
         const val THEME_DARK = "dark"

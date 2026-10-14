@@ -22,13 +22,64 @@ class LogoBackupsTest {
             File(from, "notes.txt").writeText("not part of the backup")
             File(from, "manifest.tsv").writeText("1\tTRT 1\t1.png\n2\tATV\t2.png\n3\tEvil\t../escape.png\n")
             val to = File(root, "to")
-            LogoBackups.copySnapshot(from, to)
-            assertEquals(setOf("1.png", "2.png", "manifest.tsv"), to.list()!!.toSet())
+            LogoBackups.copySnapshot(from, to, mapOf("created" to "1"))
+            assertEquals(setOf("1.png", "2.png", "manifest.tsv", "backup.properties", "checksums.sha256"), to.list()!!.toSet())
             assertEquals("two", File(to, "2.png").readText())
             assert(LogoBackups.isSnapshot(to))
+            assertEquals(2, LogoBackups.readManifest(to).size) // the "../escape.png" line is dropped
         } finally {
             root.deleteRecursively()
         }
+    }
+
+    @Test
+    fun checksumsCatchDamagedLogosAndDamagedManifests() {
+        val root = kotlin.io.path.createTempDirectory().toFile()
+        try {
+            val backup = File(root, "backup").apply { mkdirs() }
+            File(backup, "1.png").writeText("one")
+            File(backup, "2.png").writeText("two")
+            File(backup, "manifest.tsv").writeText("1\tTRT 1\t1.png\n2\tATV\t2.png\n")
+            LogoBackups.writeChecksums(backup)
+            assertEquals(emptySet<String>(), LogoBackups.verify(backup).bad)
+
+            // A damaged logo is reported and left out of a copy
+            File(backup, "2.png").writeText("tw0")
+            val verification = LogoBackups.verify(backup)
+            assert(verification.checked && verification.manifestOk)
+            assertEquals(setOf("2.png"), verification.bad)
+            val copy = File(root, "copy")
+            LogoBackups.copySnapshot(backup, copy)
+            assertEquals(listOf("1.png"), LogoBackups.readManifest(copy).map { it.file.name })
+            assertEquals(emptySet<String>(), LogoBackups.verify(copy).bad)
+
+            // A damaged manifest makes the whole backup unusable
+            File(backup, "manifest.tsv").appendText("3\tShow\t1.png\n")
+            assert(!LogoBackups.verify(backup).manifestOk)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun backupsWithoutChecksumsAreUsedUnchecked() {
+        val root = kotlin.io.path.createTempDirectory().toFile()
+        try {
+            File(root, "1.png").writeText("one")
+            File(root, "manifest.tsv").writeText("1\tTRT 1\t1.png\n")
+            val verification = LogoBackups.verify(root)
+            assert(!verification.checked && verification.manifestOk)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun settingsSurviveTheBackupFile() {
+        val settings = com.babadogan.channellogos.settings.Settings(language = "ro", theme = "light", preselectSafe = false, iptv = false)
+        assertEquals(settings, com.babadogan.channellogos.settings.Settings.fromMap(settings.toMap()))
+        // Unknown values fall back to the defaults
+        assertEquals("system", com.babadogan.channellogos.settings.Settings.fromMap(mapOf("language" to "xx")).language)
     }
 
     @Test

@@ -171,6 +171,23 @@ class TvShell(private val context: Context) : AutoCloseable {
         return removed
     }
 
+    /**
+     * Copies the folder [from] to [to] as the shell user, who may use the TV's shared storage
+     * (where this app may not write on newer Android versions). [to] is replaced. Returns whether
+     * the copy finished.
+     */
+    fun copyFolder(from: String, to: String): Boolean {
+        val response = withConnection { it.shell("rm -rf '$to' && mkdir -p '$to' && cp -rp '$from'/. '$to'/ && echo copied") }
+        return response.output.trim().endsWith("copied")
+    }
+
+    fun exists(path: String): Boolean =
+        withConnection { it.shell("[ -e '$path' ] && echo yes") }.output.trim() == "yes"
+
+    /** A folder in this app's storage that the shell user can read and write. */
+    fun stagingDirectory(name: String): File =
+        File(context.getExternalFilesDir(null) ?: error("No external storage"), name)
+
     /** Where logos to write are put: app storage the shell user can read. */
     fun logoDirectory(): File =
         File(context.getExternalFilesDir(null) ?: error("No external storage"), "logos").apply { mkdirs() }
