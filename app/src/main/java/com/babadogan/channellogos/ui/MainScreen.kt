@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +47,20 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -85,6 +100,7 @@ private val FocusFrame get() = if (Palette.dark) Color.White else Color(0xFF1C1C
 fun MainScreen(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     var picking by remember { mutableStateOf<Channel?>(null) }
+    var quickMenu by remember { mutableStateOf<Channel?>(null) }
     var showSettings by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
@@ -98,23 +114,106 @@ fun MainScreen(viewModel: MainViewModel) {
     }
     if (Palette.dark != dark) Palette.dark = dark
 
-    Row(modifier = Modifier.fillMaxSize().background(Background).padding(horizontal = 40.dp, vertical = 28.dp)) {
+    // Typing a letter or digit anywhere on the main screen starts a channel search (keyboard or remote digits).
+    var search by remember { mutableStateOf(TextFieldValue(state.query)) }
+    var searchFocused by remember { mutableStateOf(false) }
+    val searchFocus = remember { FocusRequester() }
+    val onSearch: (TextFieldValue) -> Unit = { search = it; viewModel.setQuery(it.text) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Background)
+            .onPreviewKeyEvent { event ->
+                if (searchFocused || event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) return@onPreviewKeyEvent false
+                val code = event.utf16CodePoint
+                if (code == 0 || !Character.isLetterOrDigit(code)) return@onPreviewKeyEvent false
+                val text = search.text + String(Character.toChars(code))
+                onSearch(TextFieldValue(text, TextRange(text.length)))
+                runCatching { searchFocus.requestFocus() }
+                true
+            }
+            .padding(horizontal = 40.dp, vertical = 28.dp)
+    ) {
         SidePanel(
             state, viewModel,
             onSettings = { showSettings = true },
             onAbout = { showAbout = true },
             onConfirm = { message, action -> confirming = message to action },
-            modifier = Modifier.width(340.dp).fillMaxHeight()
+            modifier = Modifier.width(360.dp).fillMaxHeight()
         )
         Spacer(Modifier.width(28.dp))
-        ChannelList(state, viewModel, onChange = { picking = it }, modifier = Modifier.weight(1f).fillMaxHeight())
+        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+            if (state.connection == MainViewModel.Connection.Connected) {
+                SearchField(
+                    value = search,
+                    onValueChange = onSearch,
+                    focusRequester = searchFocus,
+                    onFocusChange = { searchFocused = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(12.dp))
+                if (state.query.isNotBlank() && state.visibleChannels.isEmpty() && state.hiddenMatches == 0) {
+                    Text(Strings.noMatches, color = TextSecondary, fontSize = 15.sp, modifier = Modifier.padding(8.dp))
+                }
+                // Searching for a channel that already has a logo should not end in "nothing found".
+                val hidden = state.hiddenMatches
+                if (hidden > 0) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
+                        Text(Strings.hiddenMatches(hidden), color = TextSecondary, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        Spacer(Modifier.width(12.dp))
+                        TvButton(Strings.searchAll, small = true, onClick = { viewModel.setShowAll(true) })
+                    }
+                }
+                val visible = state.visibleChannels
+                if (visible.isNotEmpty()) {
+                    Text(
+                        Strings.listCounter(
+                            visible.size,
+                            visible.count { it.id in state.selected },
+                            visible.count { it.id in state.suggestions }
+                        ) + "  ·  " + Strings.longPressHint,
+                        color = TextSecondary, fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                    )
+                } else if (state.noTunerChannels && !state.busy) {
+                    Text(Strings.noChannelsExplained, color = Orange, fontSize = 15.sp, modifier = Modifier.padding(8.dp))
+                }
+            }
+            ChannelList(
+                state, viewModel,
+                onChange = { picking = it },
+                onLongPress = { quickMenu = it },
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
+        }
     }
 
+    quickMenu?.let { channel ->
+        QuickMenu(
+            channel = channel,
+            hasSuggestion = channel.id in state.suggestions,
+            selected = channel.id in state.selected,
+            changed = channel.id in state.changed,
+            onWrite = { quickMenu = null; viewModel.applyOne(channel.id) },
+            onToggle = { quickMenu = null; viewModel.toggle(channel.id) },
+            onChange = { quickMenu = null; picking = channel },
+            onReset = {
+                quickMenu = null
+                confirming = Strings.confirmReset(1) to { viewModel.resetToDefault(listOf(channel.id)) }
+            },
+            onDismiss = { quickMenu = null }
+        )
+    }
     picking?.let { channel ->
         LogoPicker(channel, viewModel, changed = channel.id in state.changed, onDismiss = { picking = null })
     }
     if (showSettings) SettingsDialog(state.settings, onChange = viewModel::updateSettings, onDismiss = { showSettings = false })
     if (showAbout) AboutDialog(onDismiss = { showAbout = false })
+    // Progress and results cover the whole screen: a line at the bottom of the panel went unseen.
+    if (state.busy && state.connection == MainViewModel.Connection.Connected) BusyScreen(state.status)
+    else if (state.outcome != null) OutcomeScreen(state.outcome!!, onDismiss = viewModel::dismissOutcome)
+    else state.pendingWrite?.let { WriteConfirmScreen(it, onWrite = viewModel::confirmWrite, onCancel = viewModel::cancelWrite) }
     confirming?.let { (message, action) ->
         TvDialog(
             title = Strings.confirm,
@@ -140,17 +239,19 @@ private fun SidePanel(
     modifier: Modifier
 ) {
     // Scrolls: on a 1080p TV the buttons do not all fit; D-pad focus scrolls them into view.
-    Column(modifier = modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text(Strings.appTitle, color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        Text(Strings.appSubtitle, color = TextSecondary, fontSize = 14.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TvButton(Strings.settings, onClick = onSettings)
-            TvButton(Strings.about, onClick = onAbout)
+    val connected = state.connection == MainViewModel.Connection.Connected
+    Column(modifier = modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(Strings.appTitle, color = TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        // Once connected the subtitle only takes room; the About dialog says the same.
+        if (!connected) Text(Strings.appSubtitle, color = TextSecondary, fontSize = 14.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TvButton(Strings.settings, onClick = onSettings, small = true, modifier = Modifier.weight(1f))
+            TvButton(Strings.about, onClick = onAbout, small = true, modifier = Modifier.weight(1f))
         }
 
         Column(
-            modifier = Modifier.fillMaxWidth().background(Surface, RoundedCornerShape(16.dp)).padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().background(Surface, RoundedCornerShape(16.dp)).padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             when (val connection = state.connection) {
                 MainViewModel.Connection.Connecting -> {
@@ -173,11 +274,12 @@ private fun SidePanel(
                     Text(Strings.sourceStats(state.tvLogos, state.gitHubLogos, state.piconsLogos, state.iptvLogos), color = TextSecondary, fontSize = 13.sp)
                     if (state.usbLogos > 0) Text(Strings.usbStats(state.usbLogos), color = TextSecondary, fontSize = 13.sp)
                     if (state.sourcesUpdatedAt > 0L) {
-                        val date = remember(state.sourcesUpdatedAt) {
-                            java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
-                                .format(java.util.Date(state.sourcesUpdatedAt))
-                        }
+                        val date = Strings.dateTime(state.sourcesUpdatedAt)
                         Text(Strings.sourcesUpdatedAt(date), color = TextSecondary, fontSize = 13.sp)
+                    }
+                    if (state.extraCountries.isNotEmpty()) {
+                        val names = state.extraCountries.joinToString { java.util.Locale("", it).getDisplayCountry(Strings.locale) }
+                        Text(Strings.extraCountries(names), color = Accent, fontSize = 13.sp)
                     }
                     if (state.tvTableMissing) Text(Strings.tvTableMissing, color = Orange, fontSize = 13.sp)
                     if (state.gitHubFailed) Text(Strings.gitHubUnavailable, color = Orange, fontSize = 13.sp)
@@ -195,56 +297,126 @@ private fun SidePanel(
             }
         }
 
-        if (state.connection == MainViewModel.Connection.Connected) {
+        if (connected) {
+            val idle = !state.busy
+            // Main actions: write the selection, or undo everything the app wrote.
             val applyFocus = remember { FocusRequester() }
             TvButton(
                 Strings.apply(state.selected.size),
                 primary = true,
-                enabled = state.selected.isNotEmpty() && !state.busy,
+                enabled = state.selected.isNotEmpty() && idle,
                 onClick = viewModel::applySelected,
-                modifier = Modifier.focusRequester(applyFocus)
+                modifier = Modifier.fillMaxWidth().focusRequester(applyFocus)
             )
             LaunchedEffect(Unit) { runCatching { applyFocus.requestFocus() } }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                TvButton(Strings.showMissing, selected = !state.showAll, onClick = { viewModel.setShowAll(false) })
-                TvButton(Strings.showAll, selected = state.showAll, onClick = { viewModel.setShowAll(true) })
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                TvButton(Strings.selectAll, onClick = viewModel::selectAll, enabled = !state.busy)
-                TvButton(Strings.selectSafe, onClick = viewModel::selectSafe, enabled = !state.busy)
-            }
-            TvButton(Strings.selectNone, onClick = viewModel::selectNone, enabled = !state.busy)
-            TvButton(Strings.rescan, onClick = viewModel::scan, enabled = !state.busy)
-            TvButton(Strings.refreshSources, onClick = viewModel::refreshSources, enabled = !state.busy)
+            TvButton(
+                Strings.resetToDefault(state.changed.size),
+                enabled = idle && state.changed.isNotEmpty(),
+                onClick = { onConfirm(Strings.confirmReset(state.changed.size)) { viewModel.resetToDefault() } },
+                modifier = Modifier.fillMaxWidth()
+            )
 
-            // Backup and reset
-            Text(Strings.backupSection, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
-            val backupDate = remember(state.backupTime) {
-                if (state.backupTime == 0L) null
-                else java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(state.backupTime))
+            PanelSection(Strings.listSection)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TvButton(Strings.showMissing, selected = !state.showAll, small = true, onClick = { viewModel.setShowAll(false) }, modifier = Modifier.weight(1f))
+                TvButton(Strings.showAll, selected = state.showAll, small = true, onClick = { viewModel.setShowAll(true) }, modifier = Modifier.weight(1f))
             }
+
+            PanelSection(Strings.selectionSection)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TvButton(Strings.selectSafe, onClick = viewModel::selectSafe, enabled = idle, small = true, modifier = Modifier.weight(1f))
+                TvButton(Strings.selectAll, onClick = viewModel::selectAll, enabled = idle, small = true, modifier = Modifier.weight(1f))
+                TvButton(Strings.selectNone, onClick = viewModel::selectNone, enabled = idle && state.selected.isNotEmpty(), small = true, modifier = Modifier.weight(1f))
+            }
+
+            PanelSection(Strings.updateSection)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TvButton(Strings.rescan, onClick = viewModel::scan, enabled = idle, small = true, modifier = Modifier.weight(1f))
+                TvButton(Strings.refreshSources, onClick = viewModel::refreshSources, enabled = idle, small = true, modifier = Modifier.weight(1f))
+            }
+
+            PanelSection(Strings.backupSection)
+            val backupDate = if (state.backupTime == 0L) null else Strings.dateTime(state.backupTime)
             Text(
                 backupDate?.let { Strings.backupInfo(state.backupCount, it) } ?: Strings.noBackup,
                 color = TextSecondary, fontSize = 13.sp
             )
-            TvButton(Strings.backupLogos, enabled = !state.busy && state.withLogo > 0,
-                onClick = { onConfirm(Strings.confirmBackup) { viewModel.backupLogos() } })
-            TvButton(Strings.restoreBackup, enabled = !state.busy && state.backupCount > 0,
-                onClick = { onConfirm(Strings.confirmRestore) { viewModel.restoreBackup() } })
-            TvButton(Strings.resetToDefault(state.changed.size), enabled = !state.busy && state.changed.isNotEmpty(),
-                onClick = { onConfirm(Strings.confirmReset(state.changed.size)) { viewModel.resetToDefault() } })
-        }
-
-        state.status?.let { status ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (state.busy) {
-                    CircularProgressIndicator(color = Accent, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(10.dp))
-                }
-                Text(status, color = TextPrimary, fontSize = 14.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TvButton(Strings.backupLogos, enabled = idle && state.withLogo > 0, small = true,
+                    onClick = { onConfirm(Strings.confirmBackup) { viewModel.backupLogos() } }, modifier = Modifier.weight(1f))
+                TvButton(Strings.restoreBackup, enabled = idle && state.backupCount > 0, small = true,
+                    onClick = { onConfirm(Strings.confirmRestore) { viewModel.restoreBackup() } }, modifier = Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TvButton(Strings.exportBackup, enabled = idle && state.backupCount > 0, small = true,
+                    onClick = viewModel::exportBackup, modifier = Modifier.weight(1f))
+                TvButton(Strings.importBackup, enabled = idle, small = true,
+                    onClick = { onConfirm(Strings.confirmImport) { viewModel.importBackup() } }, modifier = Modifier.weight(1f))
             }
         }
     }
+}
+
+/** Small heading over a group of side-panel buttons. */
+@Composable
+private fun PanelSection(title: String) {
+    Text(
+        title.uppercase(Strings.locale), color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.8.sp, modifier = Modifier.padding(top = 8.dp)
+    )
+}
+
+/**
+ * Search box over the channel list. Up/down leave it like any other control (a text field would
+ * keep them for its cursor); Escape clears it.
+ */
+@Composable
+private fun SearchField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    focusRequester: FocusRequester,
+    onFocusChange: (Boolean) -> Unit,
+    modifier: Modifier
+) {
+    val focusManager = LocalFocusManager.current
+    var focused by remember { mutableStateOf(false) }
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = TextStyle(color = TextPrimary, fontSize = 17.sp),
+        cursorBrush = SolidColor(Accent),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .onFocusChanged { focused = it.isFocused; onFocusChange(it.isFocused) }
+            .onPreviewKeyEvent { event ->
+                if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    androidx.compose.ui.input.key.Key.DirectionDown -> focusManager.moveFocus(FocusDirection.Down)
+                    androidx.compose.ui.input.key.Key.DirectionUp -> focusManager.moveFocus(FocusDirection.Up)
+                    androidx.compose.ui.input.key.Key.Escape -> {
+                        if (value.text.isEmpty()) false else { onValueChange(TextFieldValue("")); true }
+                    }
+                    else -> false
+                }
+            },
+        decorationBox = { inner ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(if (focused) SurfaceVariant else Surface, RoundedCornerShape(14.dp))
+                    .border(if (focused) BorderStroke(3.dp, FocusFrame) else BorderStroke(0.dp, Color.Transparent), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    if (value.text.isEmpty()) Text(Strings.searchHint, color = TextSecondary, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    inner()
+                }
+            }
+        }
+    )
 }
 
 @Composable
@@ -252,17 +424,21 @@ private fun ChannelList(
     state: MainViewModel.UiState,
     viewModel: MainViewModel,
     onChange: (Channel) -> Unit,
+    onLongPress: (Channel) -> Unit,
     modifier: Modifier
 ) {
     LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(state.visibleChannels, key = { it.id }) { channel ->
+            val suggestion = state.suggestions[channel.id]
             ChannelRow(
                 channel = channel,
                 changed = channel.id in state.changed,
-                suggestion = state.suggestions[channel.id],
+                suggestion = suggestion,
+                poor = suggestion != null && suggestion.id in state.poorLogos,
                 selected = channel.id in state.selected,
                 viewModel = viewModel,
                 onToggle = { viewModel.toggle(channel.id) },
+                onLongPress = { onLongPress(channel) },
                 onChange = { onChange(channel) }
             )
         }
@@ -274,13 +450,15 @@ private fun ChannelRow(
     channel: Channel,
     changed: Boolean,
     suggestion: LogoCandidate?,
+    poor: Boolean,
     selected: Boolean,
     viewModel: MainViewModel,
     onToggle: () -> Unit,
+    onLongPress: () -> Unit,
     onChange: () -> Unit
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        FocusBox(onClick = onToggle, modifier = Modifier.weight(1f)) { focused ->
+        FocusBox(onClick = onToggle, onLongClick = onLongPress, modifier = Modifier.weight(1f)) { focused ->
             Row(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -303,9 +481,13 @@ private fun ChannelRow(
                         if (suggestion != null) {
                             Text("  ·  ${sourceLabel(suggestion)}  ·  ", color = if (focused) TextPrimary else TextSecondary, fontSize = 12.sp)
                             // Safe matches in green; anything that deserves a look is marked "check" in orange.
-                            val safe = LogoMatching.isSafe(suggestion)
+                            val safe = LogoMatching.isSafe(suggestion) && !poor
                             Text(
-                                if (safe) strengthLabel(suggestion.strength) else Strings.check,
+                                when {
+                                    poor -> Strings.lowQualityMark
+                                    safe -> strengthLabel(suggestion.strength)
+                                    else -> Strings.check
+                                },
                                 color = if (safe) Green else Orange,
                                 fontSize = 12.sp,
                                 maxLines = 1
@@ -391,6 +573,141 @@ private fun TvDialog(
     }
 }
 
+/** Quick actions for one channel, opened by holding OK on its row. */
+@Composable
+private fun QuickMenu(
+    channel: Channel,
+    hasSuggestion: Boolean,
+    selected: Boolean,
+    changed: Boolean,
+    onWrite: () -> Unit,
+    onToggle: () -> Unit,
+    onChange: () -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    TvDialog(title = channel.name, onDismiss = onDismiss, maxWidth = 520.dp) {
+        val first = remember { FocusRequester() }
+        LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+        val wide = Modifier.fillMaxWidth()
+        if (hasSuggestion) {
+            TvButton(Strings.writeNow, primary = true, onClick = onWrite, modifier = wide.focusRequester(first))
+            TvButton(if (selected) Strings.unselect else Strings.select, onClick = onToggle, modifier = wide)
+            TvButton(Strings.change, onClick = onChange, modifier = wide)
+        } else {
+            TvButton(Strings.change, onClick = onChange, modifier = wide.focusRequester(first))
+        }
+        if (changed) TvButton(Strings.resetOne, onClick = onReset, modifier = wide)
+    }
+}
+
+/** Full-screen check before writing: how many logos, which replace existing ones, which look poor. */
+@Composable
+private fun WriteConfirmScreen(pending: MainViewModel.PendingWrite, onWrite: (skipLowQuality: Boolean) -> Unit, onCancel: () -> Unit) {
+    Dialog(
+        onDismissRequest = onCancel,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        val writeFocus = remember { FocusRequester() }
+        LaunchedEffect(pending) { runCatching { writeFocus.requestFocus() } }
+        Column(
+            modifier = Modifier.fillMaxSize().background(Background).padding(horizontal = 120.dp, vertical = 48.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(Strings.confirmWriteTitle, color = TextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(20.dp))
+            Column(modifier = Modifier.widthIn(max = 760.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(Strings.confirmWriteSummary(pending.total), color = TextPrimary, fontSize = 20.sp)
+                if (pending.replacing > 0) Text(Strings.replacingWarning(pending.replacing), color = Orange, fontSize = 17.sp)
+                if (pending.lowQuality > 0) Text(Strings.lowQualityWarning(pending.lowQuality), color = Orange, fontSize = 17.sp)
+                if (pending.failed > 0) Text(Strings.prepareFailed(pending.failed), color = Orange, fontSize = 17.sp)
+                if (pending.autoBackup) Text(Strings.autoBackupNote, color = TextSecondary, fontSize = 16.sp)
+            }
+            Spacer(Modifier.height(32.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TvButton(Strings.writeAll(pending.total), primary = true, onClick = { onWrite(false) }, modifier = Modifier.focusRequester(writeFocus))
+                if (pending.lowQuality in 1 until pending.total) {
+                    TvButton(Strings.skipLowQuality(pending.total - pending.lowQuality), onClick = { onWrite(true) })
+                }
+                TvButton(Strings.no, onClick = onCancel)
+            }
+        }
+    }
+}
+
+/** Full-screen progress ring while a task runs; it cannot be dismissed (the task goes on regardless). */
+@Composable
+private fun BusyScreen(status: String?) {
+    Dialog(
+        onDismissRequest = {},
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false, dismissOnBackPress = false, dismissOnClickOutside = false
+        )
+    ) {
+        // Takes focus so remote keys do not reach the screen behind.
+        val focus = remember { FocusRequester() }
+        LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+        Column(
+            modifier = Modifier.fillMaxSize().background(Background.copy(alpha = 0.94f)).focusRequester(focus).focusable(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            CircularProgressIndicator(color = Accent, strokeWidth = 6.dp, modifier = Modifier.size(84.dp))
+            Spacer(Modifier.height(32.dp))
+            Text(status ?: Strings.loadingChannels, color = TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(10.dp))
+            Text(Strings.pleaseWait, color = TextSecondary, fontSize = 16.sp)
+        }
+    }
+}
+
+/** Full-screen result of a task: a green tick or an orange warning, the message and an OK button. */
+@Composable
+private fun OutcomeScreen(outcome: MainViewModel.Outcome, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        val okFocus = remember { FocusRequester() }
+        LaunchedEffect(outcome) { runCatching { okFocus.requestFocus() } }
+        val color = if (outcome.success) Green else Orange
+        Column(
+            modifier = Modifier.fillMaxSize().background(Background).padding(horizontal = 120.dp, vertical = 48.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(Modifier.size(96.dp).background(color, CircleShape), contentAlignment = Alignment.Center) {
+                // Drawn rather than typed: older Android fonts lack the glyphs.
+                androidx.compose.foundation.Canvas(modifier = Modifier.size(44.dp)) {
+                    val stroke = size.width * 0.14f
+                    val cap = androidx.compose.ui.graphics.StrokeCap.Round
+                    fun at(x: Float, y: Float) = androidx.compose.ui.geometry.Offset(size.width * x, size.height * y)
+                    if (outcome.success) {
+                        drawLine(Color.White, at(0.08f, 0.55f), at(0.38f, 0.85f), stroke, cap)
+                        drawLine(Color.White, at(0.38f, 0.85f), at(0.94f, 0.18f), stroke, cap)
+                    } else {
+                        drawLine(Color.White, at(0.5f, 0.06f), at(0.5f, 0.62f), stroke, cap)
+                        drawCircle(Color.White, stroke * 0.65f, at(0.5f, 0.92f))
+                    }
+                }
+            }
+            Spacer(Modifier.height(28.dp))
+            Text(outcome.title, color = TextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(16.dp))
+            Text(
+                outcome.message, color = TextSecondary, fontSize = 18.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.widthIn(max = 760.dp)
+            )
+            Spacer(Modifier.height(32.dp))
+            TvButton(Strings.ok, primary = true, onClick = onDismiss, modifier = Modifier.focusRequester(okFocus).widthIn(min = 160.dp))
+        }
+    }
+}
+
 /** A thin scroll indicator on the right edge, shown while the content is longer than the box. */
 private fun Modifier.scrollbar(scroll: androidx.compose.foundation.ScrollState): Modifier =
     drawWithContent {
@@ -464,6 +781,7 @@ private fun CloseButton(onClick: () -> Unit) {
 
 @Composable
 private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Boolean, onDismiss: () -> Unit) {
+    val state by viewModel.state.collectAsState()
     var fromUsb by remember { mutableStateOf(false) }
     val candidates = remember(channel.id, fromUsb) {
         if (fromUsb) viewModel.usbCandidatesFor(channel) else viewModel.candidatesFor(channel)
@@ -480,6 +798,22 @@ private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Bool
             if (changed) TvButton(Strings.resetOne, onClick = { viewModel.resetToDefault(listOf(channel.id)); onDismiss() })
         }
     ) {
+        // The logo the channel has now, to compare the candidates with.
+        if (channel.hasLogo) {
+            val current by produceState<ImageBitmap?>(null, channel.id) { value = viewModel.currentLogo(channel) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(width = 68.dp, height = 52.dp).background(Color(0xFFE5E5EA), RoundedCornerShape(6.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    current?.let { Image(it, contentDescription = Strings.currentLogo, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
+                }
+                Spacer(Modifier.width(16.dp))
+                Text(Strings.currentLogo, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            }
+        } else {
+            Text(Strings.currentLogoNone, color = TextSecondary, fontSize = 14.sp)
+        }
         if (candidates.isEmpty()) Text(if (fromUsb) Strings.usbEmpty else Strings.noCandidates, color = TextSecondary, fontSize = 14.sp)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(candidates, key = { it.id }) { candidate ->
@@ -492,7 +826,12 @@ private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Bool
                         Spacer(Modifier.width(16.dp))
                         Column {
                             Text(candidate.name.substringAfterLast('/'), color = TextPrimary, fontSize = 15.sp)
-                            Text(sourceLabel(candidate), color = TextSecondary, fontSize = 12.sp)
+                            Row {
+                                Text(sourceLabel(candidate), color = TextSecondary, fontSize = 12.sp)
+                                state.poorLogos[candidate.id]?.let { issues ->
+                                    Text("  ·  ${qualityLabel(issues)}", color = Orange, fontSize = 12.sp)
+                                }
+                            }
                         }
                     }
                 }
@@ -503,61 +842,65 @@ private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Bool
 
 @Composable
 private fun SettingsDialog(settings: Settings, onChange: (Settings) -> Unit, onDismiss: () -> Unit) {
-    TvDialog(title = Strings.settings, onDismiss = onDismiss) {
-        SettingTitle(Strings.language)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    TvDialog(
+        title = Strings.settings,
+        onDismiss = onDismiss,
+        maxWidth = 980.dp,
+        footer = { TvButton(Strings.cancel, primary = true, onClick = onDismiss) }
+    ) {
+        PanelSection(Strings.appearanceSection)
+        SettingRow(Strings.language, Strings.languageDesc) {
             for ((code, label) in listOf(Settings.LANGUAGE_SYSTEM to Strings.languageSystem, "tr" to "Türkçe", "en" to "English", "ro" to "Română")) {
-                TvButton(label, selected = settings.language == code, onClick = { onChange(settings.copy(language = code)) })
+                TvButton(label, selected = settings.language == code, small = true, onClick = { onChange(settings.copy(language = code)) })
             }
         }
-
-        SettingTitle(Strings.theme)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        SettingRow(Strings.theme, Strings.themeDesc) {
             for ((code, label) in listOf(
                 Settings.THEME_SYSTEM to Strings.languageSystem,
                 Settings.THEME_DARK to Strings.themeDark,
                 Settings.THEME_LIGHT to Strings.themeLight
             )) {
-                TvButton(label, selected = settings.theme == code, onClick = { onChange(settings.copy(theme = code)) })
+                TvButton(label, selected = settings.theme == code, small = true, onClick = { onChange(settings.copy(theme = code)) })
             }
         }
 
-        SettingTitle(Strings.preselection)
-        Text(Strings.preselectionDesc, color = TextSecondary, fontSize = 13.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TvButton(Strings.preselectSafe, selected = settings.preselectSafe, onClick = { onChange(settings.copy(preselectSafe = true)) })
-            TvButton(Strings.preselectNone, selected = !settings.preselectSafe, onClick = { onChange(settings.copy(preselectSafe = false)) })
+        PanelSection(Strings.suggestionsSection)
+        SettingRow(Strings.preselection, Strings.preselectionDesc) {
+            TvButton(Strings.preselectSafe, selected = settings.preselectSafe, small = true, onClick = { onChange(settings.copy(preselectSafe = true)) })
+            TvButton(Strings.preselectNone, selected = !settings.preselectSafe, small = true, onClick = { onChange(settings.copy(preselectSafe = false)) })
         }
-
-        SettingTitle(Strings.textLogosSetting)
-        Text(Strings.textLogosDesc, color = TextSecondary, fontSize = 13.sp)
-        OnOff(settings.textLogos) { onChange(settings.copy(textLogos = it)) }
-
-        SettingTitle(Strings.sources)
-        for ((label, value, update) in listOf(
-            Triple("GitHub", settings.gitHub) { on: Boolean -> settings.copy(gitHub = on) },
-            Triple("picons", settings.picons) { on: Boolean -> settings.copy(picons = on) },
-            Triple("iptv-org", settings.iptv) { on: Boolean -> settings.copy(iptv = on) },
-            Triple("USB", settings.usb) { on: Boolean -> settings.copy(usb = on) }
-        )) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(label, color = TextPrimary, fontSize = 15.sp, modifier = Modifier.width(110.dp))
-                OnOff(value) { onChange(update(it)) }
+        SettingRow(Strings.textLogosSetting, Strings.textLogosDesc) {
+            TvButton(Strings.on, selected = settings.textLogos, small = true, onClick = { onChange(settings.copy(textLogos = true)) })
+            TvButton(Strings.off, selected = !settings.textLogos, small = true, onClick = { onChange(settings.copy(textLogos = false)) })
+        }
+        // One toggle per source: selected (framed, with a tick) is on.
+        SettingRow(Strings.sources, Strings.sourcesDesc) {
+            for ((label, value, update) in listOf(
+                Triple("GitHub", settings.gitHub) { on: Boolean -> settings.copy(gitHub = on) },
+                Triple("picons", settings.picons) { on: Boolean -> settings.copy(picons = on) },
+                Triple("iptv-org", settings.iptv) { on: Boolean -> settings.copy(iptv = on) },
+                Triple("USB", settings.usb) { on: Boolean -> settings.copy(usb = on) }
+            )) {
+                TvButton(if (value) "✓ $label" else label, selected = value, small = true, onClick = { onChange(update(!value)) })
             }
         }
     }
 }
 
+/** One setting: its name and explanation on the left, its choices on the right. */
 @Composable
-private fun SettingTitle(text: String) {
-    Text(text, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
-}
-
-@Composable
-private fun OnOff(value: Boolean, onChange: (Boolean) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        TvButton(Strings.on, selected = value, onClick = { onChange(true) })
-        TvButton(Strings.off, selected = !value, onClick = { onChange(false) })
+private fun SettingRow(title: String, description: String, options: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().background(Background, RoundedCornerShape(14.dp)).padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(4.dp))
+            Text(description, color = TextSecondary, fontSize = 13.sp)
+        }
+        Spacer(Modifier.width(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, content = options)
     }
 }
 
@@ -570,8 +913,9 @@ private fun AboutDialog(onDismiss: () -> Unit) {
     TvDialog(
         title = Strings.about,
         onDismiss = onDismiss,
-        maxWidth = 780.dp,
+        maxWidth = 980.dp,
         textBody = true,
+        footer = { TvButton(Strings.cancel, primary = true, onClick = onDismiss) },
         header = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(
@@ -582,26 +926,37 @@ private fun AboutDialog(onDismiss: () -> Unit) {
                 Spacer(Modifier.width(16.dp))
                 Column {
                     Text(Strings.appTitle, color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    Text(Strings.version(version), color = TextSecondary, fontSize = 14.sp)
+                    Text("${Strings.version(version)}  ·  ${Strings.aboutLicense}", color = TextSecondary, fontSize = 14.sp)
                     Text(Strings.aboutCompany, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
             }
         }
     ) {
-        Text(Strings.aboutWhat, color = TextPrimary, fontSize = 15.sp)
-        AboutSection(Strings.aboutHowTitle, Strings.aboutHow)
-        AboutSection(Strings.aboutSourcesTitle, Strings.aboutSources)
-        AboutSection(Strings.aboutNoteTitle, Strings.aboutNote)
-        AboutSection(Strings.aboutDeveloperTitle, Strings.aboutDeveloper)
-        AboutSection(Strings.aboutLicenseTitle, Strings.aboutLicense)
+        Text(Strings.aboutWhat, color = TextPrimary, fontSize = 16.sp)
+        // Two columns of cards: the body is wide on a TV and long lines are hard to read from the sofa.
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                AboutSection(Strings.aboutHowTitle, Strings.aboutHow)
+                AboutSection(Strings.aboutNoteTitle, Strings.aboutNote)
+                AboutSection(Strings.aboutDeveloperTitle, Strings.aboutDeveloper)
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                AboutSection(Strings.aboutSourcesTitle, Strings.aboutSources)
+            }
+        }
         AboutSection(Strings.aboutDisclaimerTitle, Strings.aboutDisclaimer)
     }
 }
 
 @Composable
 private fun AboutSection(title: String, text: String) {
-    SettingTitle(title)
-    Text(text, color = TextSecondary, fontSize = 14.sp)
+    Column(
+        modifier = Modifier.fillMaxWidth().background(Background, RoundedCornerShape(14.dp)).padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(text, color = TextSecondary, fontSize = 14.sp)
+    }
 }
 
 @Composable
@@ -629,16 +984,45 @@ private fun SelectionMark(selected: Boolean, available: Boolean) {
     }
 }
 
-/** A focusable, clickable surface that shows a clear focus frame for the remote control. */
+/**
+ * A focusable, clickable surface that shows a clear focus frame for the remote control. With
+ * [onLongClick], holding OK (or a long touch) calls it instead of [onClick].
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun FocusBox(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable (focused: Boolean) -> Unit) {
+private fun FocusBox(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    content: @Composable (focused: Boolean) -> Unit
+) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
+    // A held OK key repeats KeyDown; the first repeat opens the long-press action and the key's
+    // release is swallowed so the plain click does not follow.
+    var longPressed by remember { mutableStateOf(false) }
+    val longPressKeys = if (onLongClick == null) Modifier else Modifier.onPreviewKeyEvent { event ->
+        val okKey = event.key == androidx.compose.ui.input.key.Key.DirectionCenter ||
+            event.key == androidx.compose.ui.input.key.Key.Enter ||
+            event.key == androidx.compose.ui.input.key.Key.NumPadEnter
+        if (!okKey) return@onPreviewKeyEvent false
+        when (event.type) {
+            androidx.compose.ui.input.key.KeyEventType.KeyDown -> {
+                if (event.nativeKeyEvent.repeatCount > 0) {
+                    if (!longPressed) { longPressed = true; onLongClick() }
+                    true
+                } else false
+            }
+            androidx.compose.ui.input.key.KeyEventType.KeyUp -> longPressed.also { longPressed = false }
+            else -> false
+        }
+    }
     Box(
         modifier = modifier
             .background(if (focused) SurfaceVariant else Surface, RoundedCornerShape(14.dp))
             .border(if (focused) BorderStroke(3.dp, FocusFrame) else BorderStroke(0.dp, Color.Transparent), RoundedCornerShape(14.dp))
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .then(longPressKeys)
+            .combinedClickable(interactionSource = interaction, indication = null, onLongClick = onLongClick, onClick = onClick)
     ) {
         content(focused)
     }
@@ -651,7 +1035,9 @@ private fun TvButton(
     modifier: Modifier = Modifier,
     primary: Boolean = false,
     selected: Boolean = false,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    /** Tighter, for buttons sharing a row; long labels wrap to two centred lines. */
+    small: Boolean = false
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -673,15 +1059,18 @@ private fun TvButton(
                 RoundedCornerShape(12.dp)
             )
             .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 12.dp),
+            .padding(horizontal = if (small) 10.dp else 18.dp, vertical = if (small) 10.dp else 12.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text,
             // On the blue focus fill the text is white in both themes.
             color = if (!enabled) TextSecondary else if (focused) Color.White else TextPrimary,
-            fontSize = 15.sp,
-            fontWeight = if (focused || primary) FontWeight.SemiBold else FontWeight.Normal
+            fontSize = if (small) 14.sp else 15.sp,
+            fontWeight = if (focused || primary) FontWeight.SemiBold else FontWeight.Normal,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -694,6 +1083,9 @@ private fun sourceLabel(candidate: LogoCandidate) = when (candidate.source) {
     LogoSource.TEXT -> Strings.sourceText
     LogoSource.FILE -> Strings.sourceFile
 }
+
+private fun qualityLabel(issues: Set<com.babadogan.channellogos.logos.LogoQuality.Issue>) =
+    if (com.babadogan.channellogos.logos.LogoQuality.Issue.SMALL in issues) Strings.lowQualitySmall else Strings.lowQualityDark
 
 private fun strengthLabel(strength: NameMatcher.Strength) = when (strength) {
     NameMatcher.Strength.EXACT -> Strings.exact

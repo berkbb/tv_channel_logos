@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.babadogan.channellogos.logos.BuiltInLogoSource
 import com.babadogan.channellogos.logos.Country
+import com.babadogan.channellogos.logos.ForeignChannels
 import com.babadogan.channellogos.logos.GitHubLogoSource
 import com.babadogan.channellogos.logos.IptvOrgSource
 import com.babadogan.channellogos.logos.PiconsSource
@@ -17,6 +18,7 @@ import com.babadogan.channellogos.logos.LogoEntry
 import com.babadogan.channellogos.logos.LogoCandidate
 import com.babadogan.channellogos.logos.LogoImage
 import com.babadogan.channellogos.logos.LogoMatching
+import com.babadogan.channellogos.logos.LogoQuality
 import com.babadogan.channellogos.logos.LogoSource
 import com.babadogan.channellogos.backup.LogoBackups
 import com.babadogan.channellogos.settings.Settings
@@ -43,6 +45,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         data class Failed(val message: String) : Connection
     }
 
+    /** The end of a long task, shown full screen until the user closes it. */
+    data class Outcome(val success: Boolean, val title: String, val message: String)
+
+    /** Logos downloaded and ready to write, waiting for the user's go-ahead (see confirmWrite). */
+    data class PendingWrite(
+        val total: Int,
+        /** How many of them replace a logo the channel has now. */
+        val replacing: Int,
+        /** How many look poor on the TV (see LogoQuality). */
+        val lowQuality: Int,
+        /** Chosen logos that could not be downloaded or read; they are left out. */
+        val failed: Int,
+        /** No backup exists yet: one is taken before writing. */
+        val autoBackup: Boolean
+    )
+
     data class UiState(
         val connection: Connection = Connection.Connecting,
         val channels: List<Channel> = emptyList(),
@@ -50,9 +68,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val suggestions: Map<Long, LogoCandidate> = emptyMap(),
         val selected: Set<Long> = emptySet(),
         val showAll: Boolean = false,
+        /** Search text typed over the list; blank shows every channel of the current view. */
+        val query: String = "",
         /** Progress or result line; null when idle. */
         val status: String? = null,
         val busy: Boolean = false,
+        val outcome: Outcome? = null,
+        val pendingWrite: PendingWrite? = null,
+        /** Quality problems of logos seen so far, by candidate id (only logos with problems). */
+        val poorLogos: Map<String, Set<LogoQuality.Issue>> = emptyMap(),
+        /** The last scan found no broadcast channels in the TV's Android channel list. */
+        val noTunerChannels: Boolean = false,
+        /** Other countries whose catalogues were added because the TV carries their channels (ISO codes). */
+        val extraCountries: List<String> = emptyList(),
         val tvLogos: Int = 0,
         val gitHubLogos: Int = 0,
         val piconsLogos: Int = 0,
@@ -72,7 +100,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val withLogo: Int get() = channels.count { it.hasLogo }
         val radios: Int get() = channels.count { it.isRadio }
         /** By default the TV channels still missing a logo; radio stations only under "All". */
-        val visibleChannels: List<Channel> get() = if (showAll) channels else channels.filter { !it.hasLogo && !it.isRadio }
+        val visibleChannels: List<Channel> get() =
+            ChannelSearch.filter(if (showAll) channels else channels.filter { !it.hasLogo && !it.isRadio }, query)
+        /** Search matches the "without logo" view hides (channels with a logo, radios). */
+        val hiddenMatches: Int get() =
+            if (showAll || query.isBlank()) 0 else ChannelSearch.filter(channels, query).size - visibleChannels.size
     }
 
     private val shell = TvShell(application)
@@ -83,8 +115,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val usb = UsbLogoSource()
     private val backups = LogoBackups(application)
     private val country = Country.ofDevice()
+    /** See ForeignChannels: added once the channel list shows the TV carries their channels. */
+    private var extraCountries: List<Country> = emptyList()
     private val shellLock = Mutex()
     private val previews = ConcurrentHashMap<String, ImageBitmap>()
+    /** Fitted PNGs of the write waiting for confirmation, and which of them look poor. */
+    private var prepared: Map<Long, ByteArray> = emptyMap()
+    private var preparedPoor: Set<Long> = emptySet()
 
     private val settingsStore = SettingsStore(application)
 
@@ -122,16 +159,75 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // One after the other: run together, the two compete for the TV's slow CPU and both slow down.
             loadSources()
             _state.update { it.copy(busy = true, status = Strings.loadingChannels) }
-            showChannels(withContext(Dispatchers.IO) { runCatching { readChannels() } })
+            val error = showChannels(withContext(Dispatchers.IO) { runCatching { readChannels() } })
+            _state.update { it.copy(outcome = error ?: noChannelsWarning(it)) }
+            refreshIptvInBackground()
         }
     }
 
-    fun scan() {
-        viewModelScope.launch {
-            _state.update { it.copy(busy = true, status = Strings.loadingChannels) }
-            showChannels(withContext(Dispatchers.IO) { runCatching { readChannels() } })
+    /**
+     * The app starts from the bundled iptv-org snapshot; a fresh list is downloaded quietly once a
+     * week and used from the next start (or "Update Logos from the Internet").
+     */
+    private fun refreshIptvInBackground() {
+        if (!iptv.stale) return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { iptv.refreshList() }
+                .onSuccess { if (it) _state.update { s -> s.copy(sourcesUpdatedAt = maxOf(s.sourcesUpdatedAt, iptv.updatedAt())) } }
+                .onFailure { Log.w(TAG, "iptv-org background refresh", it) }
         }
     }
+
+    /**
+     * Adds the catalogues of [Country.EXTRA] countries whose channels [channels] include (see
+     * ForeignChannels), reloading the sources from their caches. Returns whether any was added.
+     */
+    private fun addForeignCatalogues(channels: List<Channel>): Boolean {
+        val names = channels.map { it.name }
+        val own = HashSet<String>()
+        gitHub.entries().filterValues { it.tier == LogoEntry.COUNTRY }.keys.forEach { own += it }
+        builtIn.entries().filterValues { it.tier == LogoEntry.COUNTRY }.keys.forEach { own += it }
+        val added = Country.EXTRA.filter { it != country && it !in extraCountries }.filter { other ->
+            runCatching { ForeignChannels.carries(names, gitHub.folderKeys(other), own) }
+                .onFailure { Log.w(TAG, "Catalogue of ${other.isoCode}", it) }
+                .getOrDefault(false)
+        }
+        if (added.isEmpty()) return false
+        extraCountries = extraCountries + added
+        Log.i(TAG, "Channels of ${added.joinToString { it.isoCode }} found; adding their catalogues")
+        runCatching { gitHub.load(country, extra = extraCountries) }.onFailure { Log.w(TAG, "GitHub logos", it) }
+        runCatching { picons.load(country, extra = extraCountries) }.onFailure { Log.w(TAG, "picons", it) }
+        runCatching { iptv.load(country, extra = extraCountries) }.onFailure { Log.w(TAG, "iptv-org logos", it) }
+        _state.update {
+            it.copy(
+                extraCountries = extraCountries.map { c -> c.isoCode },
+                gitHubLogos = gitHub.size,
+                piconsLogos = picons.size,
+                iptvLogos = iptv.size
+            )
+        }
+        return true
+    }
+
+    fun scan() {
+        if (_state.value.busy) return
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true, status = Strings.loadingChannels) }
+            val error = showChannels(withContext(Dispatchers.IO) { runCatching { readChannels() } })
+            _state.update {
+                it.copy(outcome = error ?: noChannelsWarning(it) ?: Outcome(true, Strings.doneTitle, Strings.channelsScanned(it.channels.size)))
+            }
+        }
+    }
+
+    fun dismissOutcome() = _state.update { it.copy(outcome = null) }
+
+    /**
+     * Some TVs keep their channel list in a private database of the manufacturer: Android's list
+     * then has no broadcast channels and logos written there would never show.
+     */
+    private fun noChannelsWarning(state: UiState): Outcome? =
+        if (state.noTunerChannels) Outcome(false, Strings.noChannelsTitle, Strings.noChannelsExplained) else null
 
     /** Called when the storage permission was granted: USB logos can be read now. */
     fun onStorageAccess() {
@@ -148,10 +244,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .also { Log.i(TAG, "Channels: ${it.size} in ${System.currentTimeMillis() - t0} ms") }
     }
 
-    private suspend fun showChannels(result: Result<List<Channel>>) {
+    /** Shows the channels read; returns the error to show when they could not be read. */
+    private suspend fun showChannels(result: Result<List<Channel>>): Outcome? {
         try {
                 val channels = result.getOrThrow()
                 val settings = _state.value.settings
+                withContext(Dispatchers.IO) { addForeignCatalogues(channels) }
                 val suggestions = withContext(Dispatchers.Default) { suggest(channels, settings) }
                 _state.update { state ->
                     state.copy(
@@ -165,13 +263,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             .filter { !it.hasLogo && !it.isRadio }
                             .mapNotNull { channel -> suggestions[channel.id]?.takeIf(LogoMatching::isSafe)?.let { channel.id } }
                             .toSet(),
+                        noTunerChannels = channels.isEmpty(),
                         busy = false,
                         status = null
                     )
                 }
+                return null
         } catch (e: Exception) {
             Log.w(TAG, "Scan failed", e)
-            _state.update { it.copy(busy = false, status = Strings.scanFailed(e.message ?: e.javaClass.simpleName)) }
+            _state.update { it.copy(busy = false, status = null) }
+            val detail = e.message ?: e.javaClass.simpleName
+            // Arçelik-style TVs: the shell user may not touch other apps' channels at all.
+            if (NO_ACCESS_MARKERS.any { detail.contains(it, ignoreCase = true) }) {
+                return Outcome(false, Strings.noChannelsTitle, "${Strings.noChannelAccess}\n\n$detail")
+            }
+            return failure(Strings.scanFailed(detail))
         }
     }
 
@@ -184,16 +290,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         state.copy(selected = state.suggestions.keys.filter { id -> state.visibleChannels.any { it.id == id } }.toSet())
     }
 
-    /** Only the safe suggestions among the visible channels (see LogoMatching.isSafe). */
+    /** Only the safe suggestions among the visible channels (see LogoMatching.isSafe), minus logos known to look poor. */
     fun selectSafe() = _state.update { state ->
         state.copy(selected = state.visibleChannels.mapNotNull { channel ->
-            state.suggestions[channel.id]?.takeIf(LogoMatching::isSafe)?.let { channel.id }
+            state.suggestions[channel.id]
+                ?.takeIf { LogoMatching.isSafe(it) && it.id !in state.poorLogos }
+                ?.let { channel.id }
         }.toSet())
     }
 
     fun selectNone() = _state.update { it.copy(selected = emptySet()) }
 
     fun setShowAll(showAll: Boolean) = _state.update { it.copy(showAll = showAll) }
+
+    fun setQuery(query: String) = _state.update { it.copy(query = query) }
 
     /** The user picked [candidate] (or nothing) for [channelId] in the picker. */
     fun choose(channelId: Long, candidate: LogoCandidate?) = _state.update { state ->
@@ -230,27 +340,111 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         previews[candidate.id]?.let { return it }
         return withContext(Dispatchers.IO) {
             runCatching {
-                val png = LogoImage.fit(read(candidate))
+                val bytes = read(candidate)
+                checkQuality(candidate, bytes)
+                val png = LogoImage.fit(bytes)
                 BitmapFactory.decodeByteArray(png, 0, png.size).asImageBitmap().also { previews[candidate.id] = it }
             }.onFailure { Log.w(TAG, "Preview of ${candidate.id} failed", it) }.getOrNull()
         }
     }
 
-    fun applySelected() {
-        val state = _state.value
-        val chosen = state.selected.mapNotNull { id -> state.suggestions[id]?.let { id to it } }
-        if (chosen.isEmpty() || state.busy) return
-        runTask(Strings.writing(0, chosen.size)) {
-            val logos = LinkedHashMap<Long, ByteArray>()
-            for ((id, candidate) in chosen) {
-                runCatching { LogoImage.fit(read(candidate)) }
-                    .onSuccess { logos[id] = it }
-                    .onFailure { Log.w(TAG, "Could not prepare ${candidate.id}", it) }
-            }
-            val written = writeKeepingOriginals(logos) { done -> _state.update { it.copy(status = Strings.writing(done, chosen.size)) } }
-            Strings.written(written, chosen.size - written)
+    /** The logo [channel] has on the TV now (for comparing in the picker); null if it has none. */
+    suspend fun currentLogo(channel: Channel): ImageBitmap? {
+        if (!channel.hasLogo) return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val png = shellLock.withLock { shell.readLogos(listOf(channel.id)) }[channel.id] ?: return@runCatching null
+                BitmapFactory.decodeByteArray(png, 0, png.size)?.asImageBitmap()
+            }.onFailure { Log.w(TAG, "Current logo of ${channel.id}", it) }.getOrNull()
         }
     }
+
+    /** Records [candidate]'s quality problems (drawn logos are made for the TV and have none). */
+    private fun checkQuality(candidate: LogoCandidate, bytes: ByteArray): Set<LogoQuality.Issue> {
+        if (candidate.source == LogoSource.TEXT) return emptySet()
+        val issues = runCatching { LogoImage.quality(bytes) }.getOrDefault(emptySet())
+        if (issues.isNotEmpty()) _state.update { it.copy(poorLogos = it.poorLogos + (candidate.id to issues)) }
+        return issues
+    }
+
+    fun applySelected() = prepareWrite(_state.value.selected)
+
+    /** Writes the suggestion of one channel (the row's quick menu), with the same confirmation. */
+    fun applyOne(channelId: Long) = prepareWrite(listOf(channelId))
+
+    /**
+     * Downloads and fits the chosen logos, then asks for confirmation ([UiState.pendingWrite]):
+     * how many replace an existing logo, which look poor, whether a backup is taken first.
+     */
+    private fun prepareWrite(ids: Collection<Long>) {
+        val state = _state.value
+        val chosen = ids.mapNotNull { id -> state.suggestions[id]?.let { id to it } }
+        if (chosen.isEmpty() || state.busy) return
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true, status = Strings.preparing(0, chosen.size)) }
+            val logos = LinkedHashMap<Long, ByteArray>()
+            val poor = HashSet<Long>()
+            withContext(Dispatchers.IO) {
+                chosen.forEachIndexed { index, (id, candidate) ->
+                    runCatching {
+                        val bytes = read(candidate)
+                        val issues = checkQuality(candidate, bytes)
+                        logos[id] = LogoImage.fit(bytes)
+                        if (issues.isNotEmpty()) poor += id
+                    }.onFailure { Log.w(TAG, "Could not prepare ${candidate.id}", it) }
+                    _state.update { it.copy(status = Strings.preparing(index + 1, chosen.size)) }
+                }
+            }
+            if (logos.isEmpty()) {
+                _state.update { it.copy(busy = false, status = null, outcome = failure(Strings.written(0, chosen.size))) }
+                return@launch
+            }
+            prepared = logos
+            preparedPoor = poor
+            val byId = _state.value.channels.associateBy { it.id }
+            _state.update {
+                it.copy(
+                    busy = false,
+                    status = null,
+                    pendingWrite = PendingWrite(
+                        total = logos.size,
+                        replacing = logos.keys.count { id -> byId[id]?.hasLogo == true },
+                        lowQuality = poor.size,
+                        failed = chosen.size - logos.size,
+                        autoBackup = needsAutoBackup()
+                    )
+                )
+            }
+        }
+    }
+
+    /** Writes the prepared logos; [skipLowQuality] leaves out those that look poor. */
+    fun confirmWrite(skipLowQuality: Boolean) {
+        val pending = _state.value.pendingWrite ?: return
+        val logos = if (skipLowQuality) prepared - preparedPoor else prepared
+        val notPrepared = pending.failed
+        cancelWrite()
+        if (logos.isEmpty()) return
+        runTask(Strings.writing(0, logos.size)) {
+            val backedUp = if (needsAutoBackup()) {
+                _state.update { it.copy(status = Strings.backingUp) }
+                takeSnapshot() > 0
+            } else false
+            val written = writeKeepingOriginals(logos) { done -> _state.update { it.copy(status = Strings.writing(done, logos.size)) } }
+            val failed = logos.size - written + notPrepared
+            val message = Strings.written(written, failed) + if (backedUp) "\n\n${Strings.autoBackedUp}" else ""
+            done(message, failed = failed)
+        }
+    }
+
+    fun cancelWrite() {
+        prepared = emptyMap()
+        preparedPoor = emptySet()
+        _state.update { it.copy(pendingWrite = null) }
+    }
+
+    /** The first write gets a full backup first, so nothing depends on remembering "Back Up Logos". */
+    private fun needsAutoBackup() = backups.snapshotTime() == 0L && _state.value.channels.any { it.hasLogo }
 
     /** Puts the original logo (or no logo) back on [ids], or on every channel the app changed. */
     fun resetToDefault(ids: Collection<Long>? = null) {
@@ -270,7 +464,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (restore.isNotEmpty()) done += writeFiles(restore) { }
             if (clear.isNotEmpty()) done += shellLock.withLock { shell.removeLogos(clear) }
             done.forEach(backups::forgetOriginal)
-            Strings.resetDone(done.size, targets.size - done.size)
+            done(Strings.resetDone(done.size, targets.size - done.size), failed = targets.size - done.size)
         }
     }
 
@@ -278,12 +472,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun backupLogos() {
         val channels = _state.value.channels.filter { it.hasLogo }
         if (channels.isEmpty()) return
-        runTask(Strings.backingUp) {
-            val logos = shellLock.withLock { shell.readLogos(channels.map { it.id }) }
-            val byChannel = channels.mapNotNull { channel -> logos[channel.id]?.let { channel to it } }.toMap()
-            backups.saveSnapshot(byChannel)
-            Strings.backedUp(byChannel.size)
-        }
+        runTask(Strings.backingUp) { done(Strings.backedUp(takeSnapshot())) }
+    }
+
+    /** Replaces the backup with every current logo; returns how many were saved. */
+    private suspend fun takeSnapshot(): Int {
+        val channels = _state.value.channels.filter { it.hasLogo }
+        val logos = shellLock.withLock { shell.readLogos(channels.map { it.id }) }
+        val byChannel = channels.mapNotNull { channel -> logos[channel.id]?.let { channel to it } }.toMap()
+        if (byChannel.isNotEmpty()) backups.saveSnapshot(byChannel)
+        return byChannel.size
+    }
+
+    /**
+     * Folders for a backup on USB sticks: this app's own folder on each stick, which the app may
+     * write without any permission. Another TV running this app finds it at the same place.
+     */
+    private fun usbBackupTargets(): List<File> =
+        getApplication<Application>().getExternalFilesDirs(null).drop(1).filterNotNull()
+            .filter { runCatching { android.os.Environment.getExternalStorageState(it) == android.os.Environment.MEDIA_MOUNTED }.getOrDefault(false) }
+            .map { File(it, LogoBackups.USB_FOLDER) }
+
+    /** Backups on USB sticks: in this app's folder there, or at a stick's top level (copied there with a computer). */
+    private fun usbBackupSources(): List<File> {
+        val topLevel = File("/storage").listFiles()
+            ?.filter { it.isDirectory && it.name != "emulated" && it.name != "self" }
+            ?.map { File(it, LogoBackups.USB_FOLDER) }
+            .orEmpty()
+        return (usbBackupTargets() + topLevel).filter { runCatching { LogoBackups.isSnapshot(it) }.getOrDefault(false) }
+    }
+
+    /** Copies the backup to a USB stick, to restore it on another TV or after a reset. */
+    fun exportBackup() = runTask(Strings.exporting) {
+        val target = usbBackupTargets().firstOrNull() ?: return@runTask failure(Strings.noUsbStick)
+        done(Strings.exported(backups.exportSnapshot(target), target.path))
+    }
+
+    /** Replaces the backup with the newest one found on a USB stick ("Restore Backup" then writes it). */
+    fun importBackup() = runTask(Strings.importing) {
+        val source = usbBackupSources().maxByOrNull { File(it, "manifest.tsv").lastModified() }
+            ?: return@runTask failure(Strings.noUsbBackup)
+        done(Strings.imported(backups.importSnapshot(source)))
     }
 
     /** Writes the backed-up logos back, matching channels by number and name. */
@@ -292,15 +521,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val matched = LogoBackups.match(backups.snapshotEntries(), _state.value.channels)
             val logos = matched.entries.associate { (channel, entry) -> channel.id to entry.file.readBytes() }
             val written = writeKeepingOriginals(logos) { }
-            Strings.restored(written, backups.snapshotEntries().size - written)
+            done(Strings.restored(written, backups.snapshotEntries().size - written), failed = backups.snapshotEntries().size - written)
         }
     }
 
     /**
-     * Runs [work] (on IO, under the busy state), then rereads the channels and shows the line it
-     * returns. Failures are shown too.
+     * Runs [work] (on IO, under the busy state), then rereads the channels and shows the outcome it
+     * returns full screen. Failures are shown too.
      */
-    private fun runTask(progress: String, work: suspend () -> String) {
+    private fun runTask(progress: String, work: suspend () -> Outcome) {
         if (_state.value.busy) return
         viewModelScope.launch {
             _state.update { it.copy(busy = true, status = progress) }
@@ -308,12 +537,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.IO) { work() }
             } catch (e: Exception) {
                 Log.w(TAG, "Task failed", e)
-                Strings.writeFailed(e.message ?: e.javaClass.simpleName)
+                failure(Strings.writeFailed(e.message ?: e.javaClass.simpleName))
             }
-            showChannels(withContext(Dispatchers.IO) { runCatching { readChannels() } })
-            _state.update { it.copy(busy = false, status = result) }
+            val scanError = showChannels(withContext(Dispatchers.IO) { runCatching { readChannels() } })
+            _state.update { it.copy(busy = false, status = null, outcome = if (result.success) scanError ?: result else result) }
         }
     }
+
+    /** A finished task; with [failed] items it is shown as a problem, with what to do about it. */
+    private fun done(message: String, failed: Int = 0) =
+        if (failed > 0) failure(message) else Outcome(true, Strings.doneTitle, message)
+
+    private fun failure(message: String) = Outcome(false, Strings.errorTitle, "$message\n\n${Strings.errorHint}")
 
     /** Saves the originals of channels changed for the first time, then writes [logos]. */
     private suspend fun writeKeepingOriginals(logos: Map<Long, ByteArray>, onProgress: (Int) -> Unit): Int {
@@ -346,8 +581,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             previews.clear()
             loadSources(refresh = true)
             _state.update { it.copy(busy = true, status = Strings.loadingChannels) }
-            showChannels(withContext(Dispatchers.IO) { runCatching { readChannels() } })
-            _state.update { it.copy(status = Strings.sourcesUpdated) }
+            val scanError = showChannels(withContext(Dispatchers.IO) { runCatching { readChannels() } })
+            _state.update {
+                it.copy(outcome = scanError
+                    ?: if (it.gitHubFailed) failure(Strings.gitHubUnavailable)
+                    else Outcome(true, Strings.updatedTitle, Strings.sourcesUpdated))
+            }
         }
     }
 
@@ -358,13 +597,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             runCatching { builtIn.load(country) }.onFailure { Log.w(TAG, "Built-in logo table", it) }
             Log.i(TAG, "Built-in logo table: ${builtIn.size} keys in ${System.currentTimeMillis() - t0} ms")
             t0 = System.currentTimeMillis()
-            val gitHubLoaded = runCatching { gitHub.load(country, refresh) }.onFailure { Log.w(TAG, "GitHub logos", it) }.isSuccess
+            val gitHubLoaded = runCatching { gitHub.load(country, refresh, extraCountries) }.onFailure { Log.w(TAG, "GitHub logos", it) }.isSuccess
             Log.i(TAG, "GitHub logos: ${gitHub.size} keys in ${System.currentTimeMillis() - t0} ms")
             t0 = System.currentTimeMillis()
-            runCatching { picons.load(country, refresh) }.onFailure { Log.w(TAG, "picons", it) }
+            runCatching { picons.load(country, refresh, extraCountries) }.onFailure { Log.w(TAG, "picons", it) }
             Log.i(TAG, "picons: ${picons.services().size} services, ${picons.entries().size} name keys in ${System.currentTimeMillis() - t0} ms")
             t0 = System.currentTimeMillis()
-            runCatching { iptv.load(country, refresh) }.onFailure { Log.w(TAG, "iptv-org logos", it) }
+            runCatching { iptv.load(country, refresh, extraCountries) }.onFailure { Log.w(TAG, "iptv-org logos", it) }
             Log.i(TAG, "iptv-org logos: ${iptv.size} keys in ${System.currentTimeMillis() - t0} ms")
             _state.update {
                 it.copy(
@@ -372,7 +611,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     gitHubLogos = gitHub.size,
                     piconsLogos = picons.size,
                     iptvLogos = iptv.size,
-                    sourcesUpdatedAt = maxOf(gitHub.updatedAt(country), picons.updatedAt(), iptv.updatedAt(country)),
+                    sourcesUpdatedAt = maxOf(gitHub.updatedAt(country), picons.updatedAt(), iptv.updatedAt()),
                     tvTableMissing = !builtIn.available,
                     gitHubFailed = !gitHubLoaded
                 )
@@ -418,5 +657,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val TAG = "ChannelLogos"
+        /** Errors meaning the shell user may not read the TV's channel list. */
+        val NO_ACCESS_MARKERS = listOf("ACCESS_ALL_EPG_DATA", "SecurityException", "Permission Denial")
     }
 }

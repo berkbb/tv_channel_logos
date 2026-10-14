@@ -22,6 +22,14 @@ object Strings {
         current = if (language == Settings.LANGUAGE_SYSTEM) systemLanguage() else language.takeIf { it in LANGUAGES } ?: "en"
     }
 
+    /** Locale of the shown language: dates and upper case follow it, not the TV's language. */
+    val locale: Locale get() = Locale.forLanguageTag(current)
+
+    /** Date and time in the shown language ("14 oct. 2026, 10:30" in Romanian). */
+    fun dateTime(epochMillis: Long): String =
+        java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT, locale)
+            .format(java.util.Date(epochMillis))
+
     private fun systemLanguage() = Locale.getDefault().language.takeIf { it in LANGUAGES } ?: "en"
 
     private fun t(turkish: String, english: String, romanian: String) = when (current) {
@@ -64,6 +72,11 @@ object Strings {
         "Surse: tabelul televizorului $tv · GitHub $gitHub · picons $picons · iptv-org $iptv"
     )
 
+    fun extraCountries(names: String) = t(
+        "Listede $names kanalları var; $names logoları da aranıyor.",
+        "The list has channels from $names; $names logos are searched too.",
+        "Lista are canale din $names; se caută și logo-uri din $names."
+    )
     val tvTableMissing get() = t("Bu TV'de yerleşik logo tablosu yok", "This TV has no built-in logo table", "Acest televizor nu are un tabel de logo-uri încorporat")
     val gitHubUnavailable get() = t("GitHub'a ulaşılamadı", "GitHub could not be reached", "GitHub nu a putut fi accesat")
 
@@ -78,9 +91,86 @@ object Strings {
     val selectNone get() = t("Seçimi Kaldır", "Clear Selection", "Anulează selecția")
     val showMissing get() = t("Logosuz TV kanalları", "TV channels without logo", "Canale TV fără logo")
     val showAll get() = t("Tümü (radyolar dahil)", "All (incl. radio)", "Toate (inclusiv radio)")
+    val listSection get() = t("Liste", "List", "Listă")
+    val selectionSection get() = t("Seçim", "Selection", "Selecție")
+    val updateSection get() = t("Tara ve güncelle", "Scan & update", "Scanare și actualizare")
+    val searchHint get() = t("Kanal ara: yazmaya başlayın (ad veya numara)", "Search channels: start typing (name or number)", "Caută canale: începeți să tastați (nume sau număr)")
+    fun hiddenMatches(count: Int) = t(
+        "Logosu olan veya radyo $count kanal daha eşleşiyor.",
+        "$count more matching channels have a logo or are radio.",
+        "Încă $count canale potrivite au logo sau sunt radio."
+    )
+    val searchAll get() = t("Tümünde Ara", "Search All", "Caută în toate")
+    fun listCounter(total: Int, selected: Int, suggested: Int) = t(
+        "$total kanal · $selected seçili · $suggested önerili",
+        "$total channels · $selected selected · $suggested with a suggestion",
+        "$total canale · $selected selectate · $suggested cu sugestie"
+    )
+    val longPressHint get() = t("OK'a basılı tutun: hızlı menü", "Hold OK: quick menu", "Țineți apăsat OK: meniu rapid")
+    val writeNow get() = t("Bu Logoyu Şimdi Yaz", "Write This Logo Now", "Scrie acest logo acum")
+    val select get() = t("Seç", "Select", "Selectează")
+    val unselect get() = t("Seçimden Çıkar", "Unselect", "Deselectează")
+    val currentLogo get() = t("Şu anki logo", "Current logo", "Logo-ul actual")
+    val currentLogoNone get() = t("Bu kanalın şu an logosu yok.", "This channel has no logo now.", "Acest canal nu are logo acum.")
+    val lowQualityMark get() = t("düşük kalite", "low quality", "calitate slabă")
+    val lowQualitySmall get() = t("çok küçük, bulanık görünebilir", "very small, may look blurry", "foarte mic, poate părea neclar")
+    val lowQualityDark get() = t("koyu ve şeffaf, koyu arka planda zor görünür", "dark and see-through, hard to see on dark backgrounds", "întunecat și transparent, greu de văzut pe fundal întunecat")
+    fun preparing(done: Int, total: Int) = t("Logolar hazırlanıyor: $done / $total", "Preparing logos: $done / $total", "Se pregătesc logo-urile: $done / $total")
+    val confirmWriteTitle get() = t("Yazmadan önce kontrol", "Check before writing", "Verificare înainte de scriere")
+    fun confirmWriteSummary(count: Int) = t("$count logo TV'ye yazılacak.", "$count logos will be written to the TV.", "$count logo-uri vor fi scrise pe televizor.")
+    fun replacingWarning(count: Int) = t(
+        "Bunların $count tanesi kanalın mevcut logosunun yerine geçecek. Eskileri saklanır; \"Orijinaline Döndür\" ile geri alınabilir.",
+        "$count of them replace a logo the channel already has. The old ones are kept and can be put back with \"Restore Original\".",
+        "$count dintre ele înlocuiesc un logo pe care canalul îl are deja. Cele vechi se păstrează și pot fi puse la loc cu „Readu la original”."
+    )
+    fun lowQualityWarning(count: Int) = t(
+        "$count logo düşük kaliteli: çok küçük ya da koyu renkli ve şeffaf. TV'de bulanık veya zor görünebilir.",
+        "$count logos are low quality: very small, or dark and see-through. They may look blurry or be hard to see on the TV.",
+        "$count logo-uri au calitate slabă: foarte mici sau întunecate și transparente. Pot părea neclare sau greu de văzut pe televizor."
+    )
+    fun prepareFailed(count: Int) = t(
+        "$count logo indirilemedi; bunlar atlanacak.",
+        "$count logos could not be downloaded and are left out.",
+        "$count logo-uri nu au putut fi descărcate și vor fi omise."
+    )
+    val autoBackupNote get() = t(
+        "Henüz yedek olmadığından, yazmadan önce TV'deki tüm logoların yedeği alınacak.",
+        "There is no backup yet, so all logos on the TV are backed up before writing.",
+        "Încă nu există o copie, așa că toate logo-urile de pe televizor vor fi salvate înainte de scriere."
+    )
+    val autoBackedUp get() = t(
+        "Yazmadan önce tüm logoların yedeği alındı.",
+        "All logos were backed up before writing.",
+        "Toate logo-urile au fost salvate înainte de scriere."
+    )
+    fun writeAll(count: Int) = t("Yaz ($count)", "Write ($count)", "Scrie ($count)")
+    fun skipLowQuality(count: Int) = t("Düşük Kalitelileri Atla ($count)", "Skip Low Quality ($count)", "Omite calitatea slabă ($count)")
+    val noChannelsTitle get() = t("Kanal bulunamadı", "No channels found", "Nu s-au găsit canale")
+    val noChannelsExplained get() = t(
+        "TV'nin Android kanal listesinde yayın kanalı yok. Kanallar henüz kurulmadıysa önce kanal araması yapın ve \"Kanalları Yeniden Tara\"ya basın. Kanallar kuruluysa bu TV onları üreticinin kendi veritabanında tutuyor olabilir; o zaman yazılan logolar TV'de görünmez.",
+        "The TV's Android channel list has no broadcast channels. If no channels are installed yet, run a channel search and press \"Rescan Channels\". If they are installed, this TV probably keeps them in the manufacturer's own database, where written logos would not show.",
+        "Lista de canale Android a televizorului nu are canale de difuzare. Dacă nu sunt instalate canale, faceți o căutare de canale și apăsați „Rescanează canalele”. Dacă sunt instalate, probabil televizorul le ține în baza de date proprie a producătorului, unde logo-urile scrise nu s-ar vedea."
+    )
+    val noChannelAccess get() = t(
+        "Bu TV, ADB kabuğunun kanal listesini okumasına izin vermiyor (ACCESS_ALL_EPG_DATA yok). Bu marka/modelde uygulama logoları değiştiremez.",
+        "This TV does not let the ADB shell read the channel list (no ACCESS_ALL_EPG_DATA). The app cannot change logos on this brand/model.",
+        "Acest televizor nu permite shell-ului ADB să citească lista de canale (fără ACCESS_ALL_EPG_DATA). Aplicația nu poate schimba logo-urile pe această marcă/model."
+    )
+    val noMatches get() = t("Aramaya uyan kanal yok.", "No channel matches the search.", "Niciun canal nu corespunde căutării.")
 
     fun scanFailed(detail: String) = t("Kanallar okunamadı: $detail", "Could not read the channels: $detail", "Canalele nu au putut fi citite: $detail")
     fun writeFailed(detail: String) = t("Logolar yazılamadı: $detail", "Could not write the logos: $detail", "Logo-urile nu au putut fi scrise: $detail")
+    val doneTitle get() = t("Tamamlandı", "Done", "Gata")
+    val updatedTitle get() = t("Güncellendi", "Updated", "Actualizat")
+    val errorTitle get() = t("Bir sorun oluştu", "Something went wrong", "A apărut o problemă")
+    val errorHint get() = t(
+        "TV'nin ağ üzerinden hata ayıklamasının açık olduğunu ve internet bağlantısını kontrol edip tekrar deneyin. Sorun sürerse TV'yi yeniden başlatın.",
+        "Check that the TV's network debugging is on and that it is online, then try again. If the problem persists, restart the TV.",
+        "Verificați că remedierea erorilor prin rețea este activată și că televizorul are internet, apoi încercați din nou. Dacă problema persistă, reporniți televizorul."
+    )
+    val ok get() = t("Tamam", "OK", "Am înțeles")
+    fun channelsScanned(count: Int) = t("$count kanal okundu.", "$count channels read.", "$count canale citite.")
+    val pleaseWait get() = t("Lütfen bekleyin, TV kapatılmamalı.", "Please wait and keep the TV on.", "Vă rugăm așteptați și nu opriți televizorul.")
     val loadingChannels get() = t("Kanallar okunuyor…", "Reading channels…", "Se citesc canalele…")
     val loadingSources get() = t("Logo kaynakları yükleniyor…", "Loading logo sources…", "Se încarcă sursele de logo-uri…")
     fun writing(done: Int, total: Int) = t("Yazılıyor: $done / $total", "Writing: $done / $total", "Se scrie: $done / $total")
@@ -141,6 +231,23 @@ object Strings {
     )
     val sources get() = t("Kaynaklar", "Sources", "Surse")
     val on get() = t("Açık", "On", "Activat")
+    val appearanceSection get() = t("Görünüm", "Appearance", "Aspect")
+    val suggestionsSection get() = t("Öneriler", "Suggestions", "Sugestii")
+    val languageDesc get() = t(
+        "\"Sistem\" TV'nin dilini kullanır.",
+        "\"System\" uses the TV's language.",
+        "„Sistem” folosește limba televizorului."
+    )
+    val themeDesc get() = t(
+        "\"Sistem\" TV'nin koyu/açık ayarını izler.",
+        "\"System\" follows the TV's dark/light setting.",
+        "„Sistem” urmează setarea întunecată/luminoasă a televizorului."
+    )
+    val sourcesDesc get() = t(
+        "Açık kaynaklar logo aramasında kullanılır; seçmek açar veya kapatır.",
+        "Sources that are on are searched for logos; select one to turn it on or off.",
+        "Sursele activate sunt folosite la căutarea logo-urilor; selectați una pentru a o activa sau dezactiva."
+    )
     val off get() = t("Kapalı", "Off", "Dezactivat")
 
     // ─── About ───
@@ -194,8 +301,8 @@ object Strings {
     val backupSection get() = t("Yedekleme", "Backup", "Copie de rezervă")
     val backupLogos get() = t("Logoları Yedekle", "Back Up Logos", "Salvează logo-urile")
     val restoreBackup get() = t("Yedekten Geri Yükle", "Restore Backup", "Restaurează copia")
-    fun resetToDefault(count: Int) = t("Varsayılana Döndür ($count)", "Reset to Default ($count)", "Revino la implicit ($count)")
-    val resetOne get() = t("Varsayılana Döndür", "Reset to Default", "Revino la implicit")
+    fun resetToDefault(count: Int) = t("Tüm Kanalları Orijinaline Döndür ($count)", "Restore All Channels to Original ($count)", "Readu toate canalele la original ($count)")
+    val resetOne get() = t("Orijinaline Döndür", "Restore Original", "Readu la original")
     fun backupInfo(count: Int, date: String) = t("Yedek: $count logo, $date", "Backup: $count logos, $date", "Copie: $count logo-uri, $date")
     val noBackup get() = t("Henüz yedek yok", "No backup yet", "Încă nu există o copie")
     val changedMark get() = t("değiştirildi", "changed", "modificat")
@@ -209,6 +316,35 @@ object Strings {
     fun resetDone(count: Int, failed: Int) =
         if (failed == 0) t("$count kanal varsayılana döndü.", "$count channels reset to default.", "$count canale readuse la implicit.")
         else t("$count kanal varsayılana döndü, $failed başarısız.", "$count channels reset, $failed failed.", "$count canale readuse la implicit, $failed eșuate.")
+    val exportBackup get() = t("Yedeği USB'ye Aktar", "Export Backup to USB", "Exportă copia pe USB")
+    val importBackup get() = t("Yedeği USB'den Al", "Import Backup from USB", "Importă copia de pe USB")
+    val exporting get() = t("Yedek USB belleğe kopyalanıyor…", "Copying the backup to the USB stick…", "Se copiază copia pe stick-ul USB…")
+    val importing get() = t("Yedek USB bellekten alınıyor…", "Reading the backup from the USB stick…", "Se citește copia de pe stick-ul USB…")
+    fun exported(count: Int, path: String) = t(
+        "$count logoluk yedek USB belleğe kopyalandı:\n$path\n\nBaşka bir TV'de bu uygulamada \"Yedeği USB'den Al\", ardından \"Yedekten Geri Yükle\"ye basın.",
+        "The backup of $count logos was copied to the USB stick:\n$path\n\nOn another TV, press \"Import Backup from USB\" in this app, then \"Restore Backup\".",
+        "Copia cu $count logo-uri a fost copiată pe stick-ul USB:\n$path\n\nPe alt televizor, apăsați „Importă copia de pe USB” în această aplicație, apoi „Restaurează copia”."
+    )
+    fun imported(count: Int) = t(
+        "USB bellekteki $count logoluk yedek alındı. TV'ye yazmak için \"Yedekten Geri Yükle\"ye basın.",
+        "The backup of $count logos was read from the USB stick. Press \"Restore Backup\" to write it to the TV.",
+        "Copia cu $count logo-uri a fost citită de pe stick-ul USB. Apăsați „Restaurează copia” pentru a o scrie pe televizor."
+    )
+    val noUsbStick get() = t(
+        "Yazılabilir USB bellek bulunamadı. Belleği takıp TV'nin tanımasını bekleyin.",
+        "No writable USB stick was found. Plug one in and wait until the TV has recognised it.",
+        "Nu s-a găsit niciun stick USB inscriptibil. Conectați unul și așteptați ca televizorul să-l recunoască."
+    )
+    val noUsbBackup get() = t(
+        "USB bellekte yedek bulunamadı. Yedek, belleğin kökünde veya bu uygulamanın klasöründe \"ChannelLogosBackup\" adlı klasörde olmalı.",
+        "No backup was found on a USB stick. It must be a folder named \"ChannelLogosBackup\" at the top of the stick or in this app's folder there.",
+        "Nu s-a găsit nicio copie pe stick-ul USB. Trebuie să fie un dosar numit „ChannelLogosBackup” în rădăcina stick-ului sau în dosarul acestei aplicații."
+    )
+    val confirmImport get() = t(
+        "USB bellekteki yedek, bu TV'deki mevcut yedeğin yerine geçecek. TV'deki logolar bu adımda değişmez.",
+        "The backup on the USB stick will replace this TV's current backup. The logos on the TV do not change at this step.",
+        "Copia de pe stick-ul USB va înlocui copia actuală a acestui televizor. Logo-urile de pe televizor nu se schimbă la acest pas."
+    )
     val confirm get() = t("Onayla", "Confirm", "Confirmă")
     val yes get() = t("Evet", "Yes", "Da")
     val no get() = t("Vazgeç", "Cancel", "Renunță")

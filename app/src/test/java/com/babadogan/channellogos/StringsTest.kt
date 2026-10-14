@@ -43,6 +43,23 @@ class StringsTest {
     }
 
     @Test
+    fun datesAndUpperCaseFollowTheShownLanguageNotTheTvs() {
+        val tvLocale = java.util.Locale.getDefault()
+        java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"))
+        try {
+            val instant = 1_792_000_000_000L
+            Strings.setLanguage("ro")
+            val romanian = Strings.dateTime(instant)
+            assertEquals("SELECȚIE", "Selecție".uppercase(Strings.locale)) // no Turkish dotted İ
+            Strings.setLanguage("tr")
+            assertNotEquals(Strings.dateTime(instant), romanian)
+            assertEquals("LİSTE", "Liste".uppercase(Strings.locale))
+        } finally {
+            java.util.Locale.setDefault(tvLocale)
+        }
+    }
+
+    @Test
     fun anUnknownLanguageFallsBackToEnglish() {
         Strings.setLanguage("de")
         val german = Strings.settings
