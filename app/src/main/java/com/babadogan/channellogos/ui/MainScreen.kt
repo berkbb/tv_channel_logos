@@ -189,6 +189,23 @@ fun MainScreen(viewModel: MainViewModel) {
         }
     }
 
+    if (state.choosingExport) {
+        TvDialog(title = Strings.exportTitle, onDismiss = { viewModel.chooseExport(false) }, maxWidth = 620.dp) {
+            Text(Strings.exportDesc, color = TextSecondary, fontSize = 14.sp)
+            val first = remember { FocusRequester() }
+            LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+            TvButton(Strings.placeUsb, primary = true, onClick = { viewModel.exportBackup(MainViewModel.BackupPlace.USB) },
+                modifier = Modifier.fillMaxWidth().focusRequester(first))
+            TvButton(Strings.placeInternal, onClick = { viewModel.exportBackup(MainViewModel.BackupPlace.INTERNAL) },
+                modifier = Modifier.fillMaxWidth())
+        }
+    }
+    state.foundBackups?.let { found ->
+        BackupList(found, onPick = { backup ->
+            viewModel.closeBackups()
+            confirming = Strings.confirmImportFound(backup.channelsChanged) to { viewModel.importBackup(backup) }
+        }, onDismiss = viewModel::closeBackups)
+    }
     quickMenu?.let { channel ->
         QuickMenu(
             channel = channel,
@@ -345,13 +362,16 @@ private fun SidePanel(
                 TvButton(Strings.backupLogos, enabled = idle && state.withLogo > 0, small = true,
                     onClick = { onConfirm(Strings.confirmBackup) { viewModel.backupLogos() } }, modifier = Modifier.weight(1f))
                 TvButton(Strings.restoreBackup, enabled = idle && state.backupCount > 0, small = true,
-                    onClick = { onConfirm(Strings.confirmRestore) { viewModel.restoreBackup() } }, modifier = Modifier.weight(1f))
+                    onClick = {
+                        val (matched, total) = viewModel.backupMatch()
+                        onConfirm(Strings.confirmRestoreMatched(matched, total, matched < total * MainViewModel.MATCH_SHARE)) { viewModel.restoreBackup() }
+                    }, modifier = Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TvButton(Strings.exportBackup, enabled = idle && state.backupCount > 0, small = true,
-                    onClick = viewModel::exportBackup, modifier = Modifier.weight(1f))
+                    onClick = { viewModel.chooseExport(true) }, modifier = Modifier.weight(1f))
                 TvButton(Strings.importBackup, enabled = idle, small = true,
-                    onClick = { onConfirm(Strings.confirmImport) { viewModel.importBackup() } }, modifier = Modifier.weight(1f))
+                    onClick = viewModel::findBackups, modifier = Modifier.weight(1f))
             }
         }
     }
@@ -567,6 +587,39 @@ private fun TvDialog(
                 if (footer != null) {
                     Spacer(Modifier.height(18.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), content = footer)
+                }
+            }
+        }
+    }
+}
+
+/** Backups found on USB sticks and in the TV's storage, newest first, with their check results. */
+@Composable
+private fun BackupList(found: List<MainViewModel.FoundBackup>, onPick: (MainViewModel.FoundBackup) -> Unit, onDismiss: () -> Unit) {
+    TvDialog(title = Strings.importTitle, onDismiss = onDismiss, maxWidth = 760.dp) {
+        if (found.isEmpty()) {
+            Text(Strings.noBackupsFound, color = TextSecondary, fontSize = 15.sp)
+            return@TvDialog
+        }
+        val first = remember { FocusRequester() }
+        LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+        found.forEachIndexed { index, backup ->
+            val modifier = if (index == 0) Modifier.fillMaxWidth().focusRequester(first) else Modifier.fillMaxWidth()
+            FocusBox(onClick = { if (backup.usable) onPick(backup) }, modifier = modifier) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    val place = if (backup.place == MainViewModel.BackupPlace.USB) Strings.placeUsb else Strings.placeInternal
+                    Text("$place  ·  ${Strings.dateTime(backup.created)}", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        Strings.backupFoundLine(backup.logos, backup.matched) + if (backup.hasSettings) "  ·  ${Strings.settingsIncluded}" else "",
+                        color = TextSecondary, fontSize = 14.sp
+                    )
+                    when {
+                        !backup.usable -> Text(Strings.backupUnusable, color = Orange, fontSize = 14.sp)
+                        backup.damaged > 0 -> Text(Strings.damagedSkipped(backup.damaged), color = Orange, fontSize = 14.sp)
+                        backup.checked -> Text(Strings.verifiedOk, color = Green, fontSize = 14.sp)
+                        else -> Text(Strings.notVerified, color = TextSecondary, fontSize = 14.sp)
+                    }
+                    if (backup.usable && backup.channelsChanged) Text(Strings.channelsChangedWarning, color = Orange, fontSize = 14.sp)
                 }
             }
         }

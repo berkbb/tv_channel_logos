@@ -61,6 +61,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val autoBackup: Boolean
     )
 
+    enum class BackupPlace { USB, INTERNAL }
+
+    /** A backup found for importing, checked against its checksums and the TV's channels. */
+    data class FoundBackup(
+        val place: BackupPlace,
+        val folder: File,
+        val created: Long,
+        val logos: Int,
+        /** Logos whose channel (by number and name) is on this TV now. */
+        val matched: Int,
+        /** Whether it has checksums (backups of version 1.0 have none). */
+        val checked: Boolean,
+        /** Logos failing their checksum (all of them when the manifest itself is damaged). */
+        val damaged: Int,
+        val hasSettings: Boolean
+    ) {
+        val usable: Boolean get() = damaged < logos
+        /** Fewer than [MATCH_SHARE] of the logos find their channel: the channel list changed a lot. */
+        val channelsChanged: Boolean get() = logos > 0 && matched < logos * MATCH_SHARE
+    }
+
     data class UiState(
         val connection: Connection = Connection.Connecting,
         val channels: List<Channel> = emptyList(),
@@ -75,6 +96,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val busy: Boolean = false,
         val outcome: Outcome? = null,
         val pendingWrite: PendingWrite? = null,
+        /** Backups found for importing; null while that list is closed. */
+        val foundBackups: List<FoundBackup>? = null,
+        val choosingExport: Boolean = false,
         /** Quality problems of logos seen so far, by candidate id (only logos with problems). */
         val poorLogos: Map<String, Set<LogoQuality.Issue>> = emptyMap(),
         /** The last scan found no broadcast channels in the TV's Android channel list. */
@@ -502,26 +526,119 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return (usbBackupTargets() + topLevel).filter { runCatching { LogoBackups.isSnapshot(it) }.getOrDefault(false) }
     }
 
-    /** Copies the backup to a USB stick, to restore it on another TV or after a reset. */
-    fun exportBackup() = runTask(Strings.exporting) {
-        val target = usbBackupTargets().firstOrNull() ?: return@runTask failure(Strings.noUsbStick)
-        done(Strings.exported(backups.exportSnapshot(target), target.path))
+    /** Saves the backup with the settings to a USB stick or the TV's shared storage. */
+    fun exportBackup(place: BackupPlace) {
+        _state.update { it.copy(choosingExport = false) }
+        runTask(Strings.exporting) {
+            val meta = backupMeta()
+            when (place) {
+                BackupPlace.USB -> {
+                    val target = usbBackupTargets().firstOrNull() ?: return@runTask failure(Strings.noUsbStick)
+                    done(Strings.exported(backups.exportSnapshot(target, meta), target.path))
+                }
+                BackupPlace.INTERNAL -> {
+                    // Written to app storage first, then copied by the shell user into shared storage,
+                    // where it survives uninstalling the app (not a factory reset).
+                    val staging = shell.stagingDirectory("backup-out")
+                    val count = backups.exportSnapshot(staging, meta)
+                    val copied = shellLock.withLock { shell.copyFolder(staging.path, INTERNAL_BACKUP) }
+                    staging.deleteRecursively()
+                    if (!copied) return@runTask failure(Strings.internalCopyFailed)
+                    done(Strings.exported(count, INTERNAL_BACKUP))
+                }
+            }
+        }
     }
 
-    /** Replaces the backup with the newest one found on a USB stick ("Restore Backup" then writes it). */
-    fun importBackup() = runTask(Strings.importing) {
-        val source = usbBackupSources().maxByOrNull { File(it, "manifest.tsv").lastModified() }
-            ?: return@runTask failure(Strings.noUsbBackup)
-        done(Strings.imported(backups.importSnapshot(source)))
+    fun chooseExport(open: Boolean) = _state.update { it.copy(choosingExport = open) }
+
+    /** Settings and creation time stored with an exported backup. */
+    private fun backupMeta(): Map<String, String> {
+        val version = runCatching {
+            getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0).versionName
+        }.getOrNull().orEmpty()
+        return mapOf("created" to System.currentTimeMillis().toString(), "app_version" to version) +
+            _state.value.settings.toMap().mapKeys { "setting.${it.key}" }
     }
 
-    /** Writes the backed-up logos back, matching channels by number and name. */
+    /** Lists the backups on USB sticks and in the TV's shared storage, checked and matched against the channels. */
+    fun findBackups() {
+        if (_state.value.busy) return
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true, status = Strings.searchingBackups) }
+            val found = withContext(Dispatchers.IO) {
+                val usb = usbBackupSources().map { describeBackup(BackupPlace.USB, it) }
+                val internal = runCatching {
+                    // The shell copies it into app storage, where the app may read it on every Android version.
+                    val staging = shell.stagingDirectory("backup-in")
+                    val copied = shellLock.withLock { shell.exists("$INTERNAL_BACKUP/${LogoBackups.MANIFEST}") && shell.copyFolder(INTERNAL_BACKUP, staging.path) }
+                    if (copied && LogoBackups.isSnapshot(staging)) listOf(describeBackup(BackupPlace.INTERNAL, staging)) else emptyList()
+                }.onFailure { Log.w(TAG, "Internal backup", it) }.getOrDefault(emptyList())
+                (usb + internal).sortedByDescending { it.created }
+            }
+            _state.update { it.copy(busy = false, status = null, foundBackups = found) }
+        }
+    }
+
+    fun closeBackups() = _state.update { it.copy(foundBackups = null) }
+
+    private fun describeBackup(place: BackupPlace, folder: File): FoundBackup {
+        val entries = LogoBackups.readManifest(folder)
+        val verification = LogoBackups.verify(folder)
+        val meta = LogoBackups.readMeta(folder)
+        val usable = entries.filter { it.file.name !in verification.bad }
+        return FoundBackup(
+            place = place,
+            folder = folder,
+            created = meta["created"]?.toLongOrNull() ?: File(folder, LogoBackups.MANIFEST).lastModified(),
+            logos = entries.size,
+            matched = LogoBackups.match(usable, _state.value.channels).size,
+            checked = verification.checked,
+            damaged = if (verification.manifestOk) verification.bad.size else entries.size,
+            hasSettings = meta.keys.any { it.startsWith("setting.") }
+        )
+    }
+
+    /**
+     * Takes [found] over as this TV's backup (logos whose checksum fails are left out) and applies
+     * its settings; "Restore Backup" then writes the logos.
+     */
+    fun importBackup(found: FoundBackup) {
+        _state.update { it.copy(foundBackups = null) }
+        runTask(Strings.importing) {
+            val imported = backups.importSnapshot(found.folder)
+            val settings = imported.meta.filterKeys { it.startsWith("setting.") }.mapKeys { it.key.removePrefix("setting.") }
+            if (settings.isNotEmpty()) {
+                val restored = Settings.fromMap(settings)
+                settingsStore.save(restored)
+                Strings.setLanguage(restored.language)
+                _state.update { it.copy(settings = restored) }
+            }
+            if (found.place == BackupPlace.INTERNAL) found.folder.deleteRecursively()
+            val message = Strings.imported(imported.logos) +
+                (if (settings.isNotEmpty()) "\n\n${Strings.settingsRestored}" else "") +
+                (if (imported.damaged > 0) "\n\n${Strings.damagedSkipped(imported.damaged)}" else "")
+            done(message, failed = imported.damaged)
+        }
+    }
+
+    /** How many of the backup's logos find their channel on this TV now: (matched, total). */
+    fun backupMatch(): Pair<Int, Int> {
+        val entries = backups.snapshotEntries()
+        return LogoBackups.match(entries, _state.value.channels).size to entries.size
+    }
+
+    /** Writes the backed-up logos back, matching channels by number and name; damaged files are skipped. */
     fun restoreBackup() {
         runTask(Strings.restoring) {
-            val matched = LogoBackups.match(backups.snapshotEntries(), _state.value.channels)
+            val bad = backups.verifySnapshot().bad
+            val entries = backups.snapshotEntries().filter { it.file.name !in bad }
+            val matched = LogoBackups.match(entries, _state.value.channels)
             val logos = matched.entries.associate { (channel, entry) -> channel.id to entry.file.readBytes() }
             val written = writeKeepingOriginals(logos) { }
-            done(Strings.restored(written, backups.snapshotEntries().size - written), failed = backups.snapshotEntries().size - written)
+            val missed = backups.snapshotEntries().size - written
+            val message = Strings.restored(written, missed) + if (bad.isNotEmpty()) "\n\n${Strings.damagedSkipped(bad.size)}" else ""
+            done(message, failed = missed)
         }
     }
 
@@ -655,9 +772,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private companion object {
-        const val TAG = "ChannelLogos"
+    companion object {
+        /** A backup whose logos find their channel less often than this means the channels changed a lot. */
+        const val MATCH_SHARE = 0.8
+        private const val TAG = "ChannelLogos"
+        /** The backup in the TV's shared storage; it survives uninstalling the app. */
+        private const val INTERNAL_BACKUP = "/sdcard/${LogoBackups.USB_FOLDER}"
         /** Errors meaning the shell user may not read the TV's channel list. */
-        val NO_ACCESS_MARKERS = listOf("ACCESS_ALL_EPG_DATA", "SecurityException", "Permission Denial")
+        private val NO_ACCESS_MARKERS = listOf("ACCESS_ALL_EPG_DATA", "SecurityException", "Permission Denial")
     }
 }

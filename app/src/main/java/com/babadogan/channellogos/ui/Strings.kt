@@ -316,35 +316,79 @@ object Strings {
     fun resetDone(count: Int, failed: Int) =
         if (failed == 0) t("$count kanal varsayılana döndü.", "$count channels reset to default.", "$count canale readuse la implicit.")
         else t("$count kanal varsayılana döndü, $failed başarısız.", "$count channels reset, $failed failed.", "$count canale readuse la implicit, $failed eșuate.")
-    val exportBackup get() = t("Yedeği USB'ye Aktar", "Export Backup to USB", "Exportă copia pe USB")
-    val importBackup get() = t("Yedeği USB'den Al", "Import Backup from USB", "Importă copia de pe USB")
-    val exporting get() = t("Yedek USB belleğe kopyalanıyor…", "Copying the backup to the USB stick…", "Se copiază copia pe stick-ul USB…")
-    val importing get() = t("Yedek USB bellekten alınıyor…", "Reading the backup from the USB stick…", "Se citește copia de pe stick-ul USB…")
+    val exportBackup get() = t("Yedeği Dışa Aktar", "Export Backup", "Exportă copia")
+    val importBackup get() = t("Yedeği İçe Aktar", "Import Backup", "Importă copia")
+    val exportTitle get() = t("Yedek nereye kaydedilsin?", "Where should the backup go?", "Unde se salvează copia?")
+    val exportDesc get() = t(
+        "Logolar ve ayarlar, her dosyanın SHA-256 özetiyle birlikte kaydedilir. USB bellekteki yedek başka bir TV'ye taşınabilir; TV dahili hafızasındaki yedek uygulama silinse de kalır (fabrika ayarlarına dönüşte silinir).",
+        "Logos and settings are saved with a SHA-256 checksum of every file. A backup on a USB stick can move to another TV; one in the TV's internal storage survives uninstalling the app (not a factory reset).",
+        "Logo-urile și setările se salvează cu suma de control SHA-256 a fiecărui fișier. O copie pe stick-ul USB poate fi mutată pe alt televizor; una în memoria internă a televizorului rămâne și dacă aplicația este dezinstalată (nu și la resetarea din fabrică)."
+    )
+    val placeUsb get() = t("USB Bellek", "USB Stick", "Stick USB")
+    val placeInternal get() = t("TV Dahili Hafıza", "TV Internal Storage", "Memoria internă a TV-ului")
+    val exporting get() = t("Yedek kaydediliyor…", "Saving the backup…", "Se salvează copia…")
+    val importing get() = t("Yedek alınıyor ve doğrulanıyor…", "Reading and checking the backup…", "Se citește și se verifică copia…")
+    val searchingBackups get() = t("Yedekler aranıyor ve doğrulanıyor…", "Looking for backups and checking them…", "Se caută și se verifică copiile…")
     fun exported(count: Int, path: String) = t(
-        "$count logoluk yedek USB belleğe kopyalandı:\n$path\n\nBaşka bir TV'de bu uygulamada \"Yedeği USB'den Al\", ardından \"Yedekten Geri Yükle\"ye basın.",
-        "The backup of $count logos was copied to the USB stick:\n$path\n\nOn another TV, press \"Import Backup from USB\" in this app, then \"Restore Backup\".",
-        "Copia cu $count logo-uri a fost copiată pe stick-ul USB:\n$path\n\nPe alt televizor, apăsați „Importă copia de pe USB” în această aplicație, apoi „Restaurează copia”."
+        "$count logoluk yedek ayarlarla birlikte kaydedildi:\n$path\n\nGeri yüklemek için bu uygulamada \"Yedeği İçe Aktar\", ardından \"Yedekten Geri Yükle\"ye basın.",
+        "The backup of $count logos was saved with the settings:\n$path\n\nTo bring it back, press \"Import Backup\" in this app, then \"Restore Backup\".",
+        "Copia cu $count logo-uri a fost salvată împreună cu setările:\n$path\n\nPentru a o readuce, apăsați „Importă copia” în această aplicație, apoi „Restaurează copia”."
+    )
+    val internalCopyFailed get() = t(
+        "Yedek TV'nin dahili hafızasına kopyalanamadı.",
+        "The backup could not be copied to the TV's internal storage.",
+        "Copia nu a putut fi copiată în memoria internă a televizorului."
     )
     fun imported(count: Int) = t(
-        "USB bellekteki $count logoluk yedek alındı. TV'ye yazmak için \"Yedekten Geri Yükle\"ye basın.",
-        "The backup of $count logos was read from the USB stick. Press \"Restore Backup\" to write it to the TV.",
-        "Copia cu $count logo-uri a fost citită de pe stick-ul USB. Apăsați „Restaurează copia” pentru a o scrie pe televizor."
+        "$count logoluk yedek alındı. TV'ye yazmak için \"Yedekten Geri Yükle\"ye basın.",
+        "The backup of $count logos was taken over. Press \"Restore Backup\" to write it to the TV.",
+        "Copia cu $count logo-uri a fost preluată. Apăsați „Restaurează copia” pentru a o scrie pe televizor."
+    )
+    val settingsRestored get() = t("Yedekteki ayarlar da yüklendi.", "The backup's settings were applied too.", "Au fost aplicate și setările din copie.")
+    fun damagedSkipped(count: Int) = t(
+        "SHA-256 doğrulaması tutmayan $count logo dosyası bozuk; bunlar atlandı.",
+        "$count logo files failed their SHA-256 check and were skipped as damaged.",
+        "$count fișiere de logo nu au trecut verificarea SHA-256 și au fost omise ca deteriorate."
     )
     val noUsbStick get() = t(
         "Yazılabilir USB bellek bulunamadı. Belleği takıp TV'nin tanımasını bekleyin.",
         "No writable USB stick was found. Plug one in and wait until the TV has recognised it.",
         "Nu s-a găsit niciun stick USB inscriptibil. Conectați unul și așteptați ca televizorul să-l recunoască."
     )
-    val noUsbBackup get() = t(
-        "USB bellekte yedek bulunamadı. Yedek, belleğin kökünde veya bu uygulamanın klasöründe \"ChannelLogosBackup\" adlı klasörde olmalı.",
-        "No backup was found on a USB stick. It must be a folder named \"ChannelLogosBackup\" at the top of the stick or in this app's folder there.",
-        "Nu s-a găsit nicio copie pe stick-ul USB. Trebuie să fie un dosar numit „ChannelLogosBackup” în rădăcina stick-ului sau în dosarul acestei aplicații."
+    val importTitle get() = t("Yedek seç", "Choose a backup", "Alegeți o copie")
+    val noBackupsFound get() = t(
+        "Yedek bulunamadı. USB bellekte veya TV'nin dahili hafızasında \"ChannelLogosBackup\" klasörü aranır.",
+        "No backup was found. A \"ChannelLogosBackup\" folder is looked for on USB sticks and in the TV's internal storage.",
+        "Nu s-a găsit nicio copie. Se caută un dosar „ChannelLogosBackup” pe stick-uri USB și în memoria internă a televizorului."
     )
-    val confirmImport get() = t(
-        "USB bellekteki yedek, bu TV'deki mevcut yedeğin yerine geçecek. TV'deki logolar bu adımda değişmez.",
-        "The backup on the USB stick will replace this TV's current backup. The logos on the TV do not change at this step.",
-        "Copia de pe stick-ul USB va înlocui copia actuală a acestui televizor. Logo-urile de pe televizor nu se schimbă la acest pas."
+    fun backupFoundLine(logos: Int, matched: Int) = t(
+        "$logos logo · $matched kanal bu TV'de bulundu",
+        "$logos logos · $matched channels found on this TV",
+        "$logos logo-uri · $matched canale găsite pe acest televizor"
     )
+    val settingsIncluded get() = t("ayarlar dahil", "settings included", "inclusiv setările")
+    val verifiedOk get() = t("SHA-256 doğrulandı: tüm dosyalar sağlam", "SHA-256 verified: all files intact", "SHA-256 verificat: toate fișierele sunt intacte")
+    val notVerified get() = t("Doğrulama özeti yok (eski sürüm yedeği)", "No checksums (backup from an older version)", "Fără sume de control (copie dintr-o versiune mai veche)")
+    val backupUnusable get() = t(
+        "Yedeğin kanal listesi bozuk; bu yedek kullanılamaz.",
+        "The backup's channel list is damaged; this backup cannot be used.",
+        "Lista de canale a copiei este deteriorată; această copie nu poate fi folosită."
+    )
+    val channelsChangedWarning get() = t(
+        "Dikkat: kanallar çok değişmiş. Yedekteki logoların çoğu bu TV'de eşleşen kanal bulamıyor.",
+        "Warning: the channels changed a lot. Most logos in the backup find no matching channel on this TV.",
+        "Atenție: canalele s-au schimbat mult. Majoritatea logo-urilor din copie nu găsesc un canal potrivit pe acest televizor."
+    )
+    fun confirmImportFound(channelsChanged: Boolean) = t(
+        "Seçilen yedek bu TV'deki mevcut yedeğin yerine geçecek ve içindeki ayarlar yüklenecek. TV'deki logolar bu adımda değişmez.",
+        "The chosen backup will replace this TV's current backup and its settings will be applied. The logos on the TV do not change at this step.",
+        "Copia aleasă va înlocui copia actuală a acestui televizor, iar setările din ea vor fi aplicate. Logo-urile de pe televizor nu se schimbă la acest pas."
+    ) + if (channelsChanged) "\n\n" + channelsChangedWarning else ""
+    fun confirmRestoreMatched(matched: Int, total: Int, channelsChanged: Boolean) = t(
+        "Yedekteki $total logodan $matched tanesi, numarası ve adı eşleşen kanallara yazılacak.",
+        "$matched of the $total backed-up logos will be written to the channels with the same number and name.",
+        "$matched din cele $total logo-uri din copie vor fi scrise pe canalele cu același număr și nume."
+    ) + if (channelsChanged) "\n\n" + channelsChangedWarning else ""
     val confirm get() = t("Onayla", "Confirm", "Confirmă")
     val yes get() = t("Evet", "Yes", "Da")
     val no get() = t("Vazgeç", "Cancel", "Renunță")
@@ -352,11 +396,6 @@ object Strings {
         "Tüm kanalların şu anki logoları yedeklenecek. Önceki yedeğin yerine geçer.",
         "The current logos of all channels will be backed up, replacing the previous backup.",
         "Logo-urile actuale ale tuturor canalelor vor fi salvate, înlocuind copia anterioară."
-    )
-    val confirmRestore get() = t(
-        "Yedekteki logolar, kanal numarası ve adı eşleşen kanallara yazılacak.",
-        "The backed-up logos will be written to the channels with the same number and name.",
-        "Logo-urile din copie vor fi scrise pe canalele cu același număr și nume."
     )
     fun confirmReset(count: Int) = t(
         "Bu uygulamanın değiştirdiği $count kanal ilk hâline döndürülecek: önceki logosu geri konacak, logosu yoksa silinecek.",
