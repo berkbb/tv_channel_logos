@@ -56,6 +56,8 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 Use the release build on the TV: a debuggable build runs several times slower on its CPU.
 
+To check a new version on a TV, follow [TESTING.md](TESTING.md).
+
 ## Limitations
 
 See [ROADMAP.md](ROADMAP.md): Android 11+ wireless-debugging pairing, other brands' logo caches and
