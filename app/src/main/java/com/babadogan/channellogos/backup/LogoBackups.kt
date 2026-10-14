@@ -79,7 +79,42 @@ class LogoBackups(context: Context) {
     /** When the snapshot was taken (0 if there is none). */
     fun snapshotTime(): Long = if (manifest.exists()) manifest.lastModified() else 0L
 
+    /** Copies the snapshot to [folder] (e.g. on a USB stick); returns how many logos it holds. */
+    fun exportSnapshot(folder: File): Int {
+        check(snapshotEntries().isNotEmpty()) { "No backup to export" }
+        copySnapshot(snapshot, folder)
+        return snapshotEntries().size
+    }
+
+    /** Replaces the snapshot with the one in [folder]; returns how many logos it holds. */
+    fun importSnapshot(folder: File): Int {
+        copySnapshot(folder, snapshot)
+        return snapshotEntries().size
+    }
+
     companion object {
+        /** Name of a backup folder on a USB stick; its manifest says which channel each logo is for. */
+        const val USB_FOLDER = "ChannelLogosBackup"
+
+        /** Whether [folder] holds a backup (a manifest next to the logos). */
+        fun isSnapshot(folder: File): Boolean = File(folder, "manifest.tsv").isFile
+
+        /**
+         * Replaces [to] with a copy of the snapshot in [from]: the manifest and the logos it names,
+         * nothing else. The manifest is written last, so a half-finished copy is never taken for a
+         * backup.
+         */
+        fun copySnapshot(from: File, to: File) {
+            val manifest = File(from, "manifest.tsv")
+            check(manifest.isFile) { "No backup in $from" }
+            val names = manifest.readLines().mapNotNull { it.split('\t').getOrNull(2) }
+                .filter { it.isNotBlank() && !it.contains('/') && !it.contains("..") }
+            to.deleteRecursively()
+            to.mkdirs()
+            for (name in names) File(from, name).takeIf { it.isFile }?.copyTo(File(to, name), overwrite = true)
+            manifest.copyTo(File(to, "manifest.tsv"), overwrite = true)
+        }
+
         /**
          * Which current channel each snapshot entry belongs to: same number and name first, then a
          * name that occurs only once. Entries without a match are left out.

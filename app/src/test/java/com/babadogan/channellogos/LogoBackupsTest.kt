@@ -13,6 +13,25 @@ class LogoBackupsTest {
     private fun entry(number: String, name: String) = SnapshotEntry(number, name, File("$number-$name.png"))
 
     @Test
+    fun aSnapshotCopiesOnlyItsManifestAndLogos() {
+        val root = kotlin.io.path.createTempDirectory().toFile()
+        try {
+            val from = File(root, "from").apply { mkdirs() }
+            File(from, "1.png").writeText("one")
+            File(from, "2.png").writeText("two")
+            File(from, "notes.txt").writeText("not part of the backup")
+            File(from, "manifest.tsv").writeText("1\tTRT 1\t1.png\n2\tATV\t2.png\n3\tEvil\t../escape.png\n")
+            val to = File(root, "to")
+            LogoBackups.copySnapshot(from, to)
+            assertEquals(setOf("1.png", "2.png", "manifest.tsv"), to.list()!!.toSet())
+            assertEquals("two", File(to, "2.png").readText())
+            assert(LogoBackups.isSnapshot(to))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun restoreMatchesByNumberAndNameAfterTheIdsChanged() {
         // A reinstallation gave the channels new ids; numbers and names survive
         val channels = listOf(channel(901, "1", "TRT 1 HD"), channel(902, "2", "ATV HD"), channel(903, "3", "KANAL D HD"))
