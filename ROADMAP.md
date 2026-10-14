@@ -32,19 +32,26 @@ app's `TvLogoTool` route cannot list or write channels on this TV.
 
 ## Reaching more TVs
 
-- **Android 11+ "Wireless debugging":** newer TVs (most Google TVs) offer only TLS pairing with a
-  code (`adb pair`) instead of plain port 5555. The dadb library does not implement pairing; add it
-  (SPAKE2 pairing + TLS) so the user can type the 6-digit code shown by the TV.
-- **Refreshing the TV's logo cache on other brands:** today the Philips live TV app
-  (`org.droidtv.playtv`) is restarted after writing, because it caches logos in memory. Find the
-  live TV app generically (the activity handling `android.media.tv` channel URIs / the TV input's
-  setup package) instead of naming the package.
-- **TVs with a private channel database:** some manufacturers keep the channel list outside
-  Android's TV provider; logos written there do not show. Detect this (no tuner channels in the
-  provider) and say so in the app.
+- **Android 11+ "Wireless debugging" — blocked (checked 14 October 2026).** A library exists:
+  [Kadb](https://github.com/flyfishxu/Kadb) (Apache-2.0, a dadb fork) does SPAKE2 pairing and the
+  STLS upgrade; 2.1.1 is the newest built with Kotlin 2.3 (2.1.3+ need Kotlin 2.4 metadata, AGP
+  9.4.1 bundles 2.2), and its SPAKE2 artifact is only on JitPack. The blocker is the TV itself:
+  the pairing code is shown in a Settings dialog, and Android stops pairing when that dialog
+  leaves the screen, so this app cannot be in front to take the code. Phones solve it with a
+  notification reply or split screen (Shizuku); Android TV has neither. Options to explore: pair
+  from a phone app that hands this app's key over, or an overlay (needs `SYSTEM_ALERT_WINDOW`,
+  rarely grantable on TVs). Many Android 11+ TVs still accept plain port 5555 with "USB debugging"
+  on, which already works.
+- **Refreshing the logo cache — check on other brands:** the app now also restarts whatever
+  answers Android's "view channel" intent (tuner input packages excluded). Confirm on a Sony /
+  Google TV that the new logos show without a reboot.
 
 ## Smaller items
 
-- Export the logo backup to a USB stick, to move prepared logos to another TV.
 - Long-run check on the TV: memory and CPU while writing a few hundred logos.
-- Startup: first iptv-org index build takes ~20 s on the TPM171E; consider a prebuilt index.
+- Refresh `app/src/main/assets/iptv-org-channels.tsv.gz` before each release
+  (`python3 tools/iptv_org_snapshot.py`).
+- On the TPM171E, measure the start with the bundled iptv-org list (names are keyed at load:
+  ~40,000 rows).
+- Check on a TV: the quick menu's held-OK detection, the write check screen, USB export on
+  Android 8 (app folder on the stick).

@@ -18,6 +18,18 @@ The first connection makes the TV ask "Allow USB debugging?" once; network debug
 After writing, the Philips live TV app (`org.droidtv.playtv`) is restarted, because it caches logos
 in memory and would keep showing the old picture of a replaced logo.
 
+## Using it
+
+The side panel holds the main actions (write the selected logos, restore every changed channel to
+its original), the list view (TV channels without a logo / all), selection, rescanning, updating
+the online sources and the logo backup. Type on a keyboard (or the remote's digits) anywhere to
+search the list by name or number. Hold OK on a row for a quick menu (write this logo now,
+change, restore original). Before writing, a full-screen check lists how many logos replace
+existing ones and which look poor; the first write backs up all logos automatically, and the
+backup can be exported to a USB stick for another TV. Long tasks show a full-screen progress ring
+and end with a full-screen result or an explained error. "Change" on a row shows the current logo
+and picks another one, one from a USB stick, or none.
+
 ## Logo sources
 
 | Source | What | Notes |
@@ -26,7 +38,7 @@ in memory and would keep showing the old picture of a replaced logo.
 | TV table | logos built into Philips firmware (`tvcontentprovider.apk`) | read-only, fixed at the firmware's date |
 | GitHub | [tv-logo/tv-logos](https://github.com/tv-logo/tv-logos), country + international/UK/US folders | no license: downloaded on the TV for personal use, nothing bundled |
 | picons | [picons/picons](https://github.com/picons/picons), logos linked to DVB services (SID/TSID/ONID) and service names | GPL-3.0: downloaded on the TV, nothing bundled; a service match whose name agrees is preselected |
-| iptv-org | [iptv-org](https://github.com/iptv-org/database) channel database (public domain) | logo links to many hosts; never preselected |
+| iptv-org | [iptv-org](https://github.com/iptv-org/database) channel database (public domain) | a snapshot of the name list ships with the app and is refreshed weekly; logo links to many hosts; never preselected |
 | Drawn | the channel name drawn on a tile | for channels no source knows; never preselected |
 
 Names are compared as keys (lowercase ASCII, Turkish letters folded, "HD/SD/TİCARİ" handled).

@@ -16,10 +16,16 @@ app/src/main/java/com/babadogan/channellogos/
 ├── tv/TvShell.kt                # dadb connection to localhost:5555, runs TvLogoTool, retries, refreshes the TV UI
 ├── logos/NameMatcher.kt         # Name → key, channel keys (HD/SD/TV/TİCARİ variants), logo keys
 ├── logos/LogoMatching.kt        # Ranking, safe matches, candidates for picking by hand
-├── logos/LogoSources.kt         # USB, TV table, GitHub, picons, iptv-org sources; LogoImage (fit / SVG / drawn logo)
+├── logos/LogoSources.kt         # USB, TV table, GitHub, picons, iptv-org sources; LogoImage (fit / SVG / drawn logo / quality)
+├── logos/LogoQuality.kt         # Flags small logos and dark logos on transparency (pure pixel maths)
+├── logos/ForeignChannels.kt     # Does the TV carry another country's channels (Country.EXTRA)?
 ├── backup/LogoBackups.kt        # Originals (for "Reset to Default") and the logo backup snapshot
 ├── settings/AppSettings.kt      # Settings + SharedPreferences store
-└── ui/                          # MainViewModel, MainScreen (list, dialogs), Strings (TR/EN)
+└── ui/
+    ├── MainViewModel.kt         # State, tasks (busy → full-screen progress, Outcome → full-screen result)
+    ├── MainScreen.kt            # Side panel, searchable channel list, dialogs (picker, settings, about)
+    ├── ChannelSearch.kt         # Type-to-filter: name keys word by word, or channel number prefix
+    └── Strings.kt               # TR/EN/RO texts; locale for dates and upper case
 ```
 
 ## 3. Talking to the TV
@@ -64,9 +70,16 @@ adb shell app_process -Djava.class.path=$APK /system/bin com.babadogan.channello
 | TV table | `com.example.tvcontentprovider` APK: `assets/Logos/ChannelLogoDatabase.db` + `assets/Logos/sys/<id>.png` | `files/tv-logo-index-<country>-<apk size>-<apk date>.tsv` |
 | GitHub | `api.github.com/repos/tv-logo/tv-logos/contents/countries/<folder>` | `files/github-<folder>.json` (1 day), images in `cache/github/` |
 | picons | `raw.githubusercontent.com/picons/picons/master/build-source/{srp,snp}.index`; logos `build-source/logos/<name>.default.png`, else `.svg` (drawn with AndroidSVG) | `files/picons-srp.index`, `files/picons-snp.index` (1 day), images as PNG in `cache/picons/` |
-| iptv-org | `iptv-org.github.io/api/logos.json` + `channels.json` (streamed, ~14 MB) | `files/iptv-org-<country>.tsv` (7 days), images in `cache/iptv/` |
+| iptv-org | bundled `assets/iptv-org-channels.tsv.gz` (name, logo URL, country); `iptv-org.github.io/api/logos.json` + `channels.json` (streamed, ~14 MB) in the background | `files/iptv-org-channels.tsv` (refreshed in the background after 7 days), images in `cache/iptv/` |
 
 "Update Logos from the Internet" ignores the ages and drops the downloaded images.
+
+Refresh the bundled iptv-org snapshot before a release: `python3 tools/iptv_org_snapshot.py`.
+
+**Other countries' channels:** `Country.EXTRA` (today Romania) is added when `ForeignChannels`
+finds at least three channels whose names only that country's GitHub folder knows. Its GitHub
+folder, iptv-org rows and picons satellites are then ranked `INTERNATIONAL` (after the TV's own
+country, never preselected).
 
 ## 5. Matching rules
 
@@ -103,6 +116,7 @@ Useful logcat filter: `adb logcat ChannelLogos:V AndroidRuntime:E '*:S'`.
 
 All texts live in `ui/Strings.kt` as `t(turkish, english, romanian)` getters; the language is
 Compose state, so changing it in Settings redraws at once. A TV in any other language gets English.
-Add new texts to all three languages; `StringsTest` fails if one is blank or if a text is
+Dates (`Strings.dateTime`) and upper case (`uppercase(Strings.locale)`) follow the chosen language,
+not the TV's: never call `DateFormat` or `uppercase()` without it. Add new texts to all three languages; `StringsTest` fails if one is blank or if a text is
 accidentally the same in two languages (proper names and shared words like "Sistem" are listed
 there).

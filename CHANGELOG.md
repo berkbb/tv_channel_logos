@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.1.0] - 2026-10-14
+
 ### Added
 - **picons source** ([picons/picons](https://github.com/picons/picons), GPL-3.0, downloaded on the
   TV, not bundled): logos linked to DVB services. `TvLogoTool list` now also prints each channel's
@@ -16,15 +20,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`SID_TSID_ONID`, Türksat 42°E preferred when satellites disagree) is preselected if its name
   agrees with the channel's. picons' service-name index is a non-preselected fallback. SVG logos
   are drawn with AndroidSVG. Can be turned off in Settings.
-
-### Known issues
-- Only TVs with plain network debugging (port 5555) can be reached; Android 11+ "Wireless
-  debugging" needs pairing, which is not implemented yet (see ROADMAP.md).
-- The logo cache refresh after writing knows only the Philips live TV app; on other brands a
-  replaced logo may show its old picture until the TV restarts.
-
 - **Romanian** UI language (Settings → Language → Română, or a TV set to Romanian), with the app
   name "Logo-uri canale".
+- **Channel search**: a search box above the channel list filters it as you type (name or number;
+  case, accents and Turkish i's ignored). Typing a letter or digit anywhere on the main screen
+  jumps into the box; Escape clears it. When the current view hides matching channels, a button
+  offers to search all channels.
+- **List counter**: "47 channels · 12 selected · 30 with a suggestion" above the list.
+- **Quick menu**: holding OK on a channel row (or a long touch) offers "Write This Logo Now",
+  select/unselect, "Change" and, for changed channels, "Restore Original".
+- **Current logo in the picker**: "Change" shows the logo the channel has now next to the candidates.
+- **Check before writing**: logos are downloaded first, then a full-screen check says how many
+  will be written, how many replace an existing logo, which look poor and which could not be
+  downloaded; "Skip Low Quality" writes only the good ones.
+- **Logo quality**: very small logos (longest side under 100 px, e.g. 52×39 thumbnails) and dark
+  logos on a transparent background are marked "low quality" in the list and the picker, never
+  count as safe, and are left out by "Select Safe Ones".
+- **Automatic backup**: the first write on a TV without a backup backs up all its logos first.
+- **Backup on USB**: "Export Backup to USB" copies the backup to the stick
+  (`Android/data/com.babadogan.channellogos/files/ChannelLogosBackup`); "Import Backup from USB"
+  reads it there or from a `ChannelLogosBackup` folder at the top of a stick, on this or another TV.
+- **Romanian channels on a non-Romanian TV**: when at least three channels match names that only
+  Romania's catalogue knows, Romania's GitHub folder, iptv-org channels and picons satellites
+  (Thor 0.8°W, Hellas Sat 39°E, Eutelsat 16°E, Astra 23.5°E) are searched too, ranked after the
+  TV's own country and never preselected. Nothing changes for TVs without Romanian channels.
+- **No channels / no access explained**: an empty Android channel list (channels not installed,
+  or kept in the manufacturer's own database) and TVs whose shell may not read the channel list
+  (no `ACCESS_ALL_EPG_DATA`) now get a full-screen explanation instead of an empty list.
+- **Full-screen progress and results**: while channels are read, logos written, backed up,
+  restored or sources updated, a progress ring with the current step covers the screen; the
+  result then opens full screen ("Done"/"Updated", or "Something went wrong" with the reason and
+  what to check). Replaces the status line at the bottom of the side panel, which did not fit on
+  the screen and made the app look frozen.
+
+### Changed
+- "Reset to Default" is now **"Restore All Channels to Original (N)"** and sits right under
+  "Write Selected" instead of at the bottom of the side panel.
+- **Tidier side panel**: buttons grouped under small headings (List, Selection, Scan & update,
+  Backup) with related buttons side by side at equal width, the two main actions full width at the
+  top, and the subtitle hidden once connected, so nearly everything fits on a 1080p screen.
+- **Settings and About redesigned**: each setting is a card with its name and explanation on the
+  left and its choices on the right, grouped under Appearance and Suggestions; logo sources are
+  single toggles (✓ when on). About shows version, license and company in the header and the
+  texts as cards in two columns. Both dialogs have a Close button for the remote.
+- Build output, `local.properties` and `.DS_Store` files are no longer tracked (new `.gitignore`).
+- **Faster first start**: iptv-org's channel list ships with the app as a snapshot
+  (`assets/iptv-org-channels.tsv.gz`, made by `tools/iptv_org_snapshot.py`) instead of a ~20 s
+  download and parse on the TV; a fresh list is downloaded in the background once a week and used
+  from the next start. The list is kept for all countries, so tiers no longer need a rebuild.
+- **Other brands' logo cache**: after writing, the app that opens TV channels (found through
+  Android's "view channel" intent) is restarted as well as Philips' live TV app; the tuner
+  inputs' own packages are never stopped.
+- "Reset to Default" in the picker is now "Restore Original".
+
+### Fixed
+- Dates and section headings followed the TV's language instead of the chosen one: a Romanian UI
+  on a Turkish TV showed Turkish month names and a dotted "İ" in upper case ("SELECȚİE").
+
+### Known issues
+- Android 11+ "Wireless debugging" (pairing code) is still not supported; see ROADMAP.md for why
+  pairing from the TV itself is blocked.
+- The app's name in the TV's app list follows the TV's language, not the language chosen in the
+  app (Android shows it from the APK's resources).
 
 ### Notes
 - Arçelik (MediaTek) TVs were checked as a logo source: they show and store no broadcast-channel
