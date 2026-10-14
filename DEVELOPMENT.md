@@ -81,6 +81,22 @@ finds at least three channels whose names only that country's GitHub folder know
 folder, iptv-org rows and picons satellites are then ranked `INTERNATIONAL` (after the TV's own
 country, never preselected).
 
+## Backups
+
+`LogoBackups` keeps the snapshot in `files/backup/snapshot`. A backup folder (the snapshot, a USB
+copy, or `/sdcard/ChannelLogosBackup`) holds:
+
+| File | Content |
+|------|---------|
+| `manifest.tsv` | `number \t name \t file` per logo; restore matches channels by number and name |
+| `<id>.png` | the logos |
+| `backup.properties` | `created`, `app_version` and `setting.*` (exports only) |
+| `checksums.sha256` | SHA-256 of every file above, `sha256sum` format; a damaged manifest refuses the backup, damaged logos are skipped |
+
+USB exports go to the app's own folder on the stick (no permission needed). The internal copy is
+written to app storage and copied by the shell user (`TvShell.copyFolder`), and read back the
+same way, since apps may not use shared storage freely on newer Android versions.
+
 ## 5. Matching rules
 
 - **Keys:** lowercase ASCII letters and digits; every Turkish i (I, İ, ı) becomes `i`, accents are

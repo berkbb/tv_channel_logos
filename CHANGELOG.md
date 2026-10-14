@@ -11,6 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-10-14
+
+### Added
+- **Backup to USB or the TV's internal storage**: "Export Backup" asks where to save; the internal
+  copy (`/sdcard/ChannelLogosBackup`, written by the shell user) survives uninstalling the app.
+  The backup now carries the settings too, and "Import Backup" applies them.
+- **SHA-256 verification**: every backup gets a `checksums.sha256` (the `sha256sum` format, so it
+  can be checked on a computer). Importing and restoring skip logos that fail it; a backup whose
+  channel list fails it is refused. Backups of 1.1.0 and older have no checksums and are marked
+  "not verified".
+- **Changed channels warning**: "Import Backup" lists every backup found (place, date, logo count,
+  how many channels match this TV, check result); when fewer than 80 % of its logos find their
+  channel, the list and the confirmations warn that the channels changed a lot.
+
+### Changed
+- "Restore Backup" now says how many of the backed-up logos find their channel before writing.
+
+---
+
 ## [1.1.0] - 2026-10-14
 
 ### Added

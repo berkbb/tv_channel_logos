@@ -54,4 +54,5 @@ app's `TvLogoTool` route cannot list or write channels on this TV.
 - On the TPM171E, measure the start with the bundled iptv-org list (names are keyed at load:
   ~40,000 rows).
 - Check on a TV: the quick menu's held-OK detection, the write check screen, USB export on
-  Android 8 (app folder on the stick).
+  Android 8 (app folder on the stick), the internal backup copy through the shell
+  (`/sdcard/ChannelLogosBackup` and back into the app's folder) on Android 8 and 11+.
