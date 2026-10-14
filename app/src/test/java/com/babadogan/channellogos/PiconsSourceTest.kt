@@ -29,10 +29,10 @@ class PiconsSourceTest {
         )
         assertEquals(
             mapOf("2BD_8_1" to "tarimormanekrani", "1_1_1" to "trt1", "3_1_1" to "zdf"),
-            PiconsSource.servicesFor(references, preferredNamespace = "1A40000")
+            PiconsSource.servicesFor(references, preferredNamespaces = listOf("1A40000"))
         )
         // Without a preferred satellite a disputed service is left out
-        assertNull(PiconsSource.servicesFor(references, preferredNamespace = null)["1_1_1"])
+        assertNull(PiconsSource.servicesFor(references, preferredNamespaces = emptyList())["1_1_1"])
     }
 
     @Test

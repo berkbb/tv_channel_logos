@@ -64,8 +64,17 @@ class Country(val isoCode: String) {
     val gitHubFolder: String = englishName.lowercase(Locale.ROOT).replace(' ', '-')
     val gitHubSuffix: String = isoCode.lowercase(Locale.ROOT)
 
+    override fun equals(other: Any?) = other is Country && other.isoCode == isoCode
+    override fun hashCode() = isoCode.hashCode()
+
     companion object {
         fun ofDevice(): Country = Country(Locale.getDefault().country.ifEmpty { "TR" })
+
+        /**
+         * Countries whose catalogues are added when the TV turns out to carry their channels
+         * (see ForeignChannels): Romanian channels on a Turkish TV, for example.
+         */
+        val EXTRA = listOf(Country("RO"))
     }
 }
 
@@ -183,10 +192,12 @@ class GitHubLogoSource(private val context: Context) {
      * (pay-TV channels carried in many countries). Cached lists are used when GitHub cannot be
      * reached; fails only if no list at all could be loaded.
      */
-    fun load(country: Country, refresh: Boolean = false) {
+    fun load(country: Country, refresh: Boolean = false, extra: List<Country> = emptyList()) {
         byKey.clear()
         if (refresh) File(context.cacheDir, "github").deleteRecursively()
         val folders = linkedMapOf(country.gitHubFolder to country.gitHubSuffix)
+        // Countries whose channels the TV also carries come before the international folders.
+        for (other in extra) folders.putIfAbsent(other.gitHubFolder, other.gitHubSuffix)
         for ((folder, suffix) in EXTRA_FOLDERS) folders.putIfAbsent(folder, suffix)
         var loaded = 0
         for ((folder, suffix) in folders) {
@@ -206,6 +217,14 @@ class GitHubLogoSource(private val context: Context) {
     }
 
     fun entries(): Map<String, LogoEntry<String>> = byKey
+
+    /** Name keys of [country]'s folder (the cached list is used when GitHub cannot be reached). */
+    fun folderKeys(country: Country): Set<String> {
+        val files = JSONArray(listing(country.gitHubFolder, refresh = false))
+        return (0 until files.length()).mapNotNullTo(HashSet()) { i ->
+            NameMatcher.gitHubKey(files.getJSONObject(i).optString("name"), country.gitHubSuffix)
+        }
+    }
 
     /** [path] is "folder/file.png" as stored in [entries]. */
     fun read(path: String): ByteArray {
@@ -251,12 +270,13 @@ class PiconsSource(private val context: Context) {
 
     val size: Int get() = byService.size + byKey.size
 
-    fun load(country: Country, refresh: Boolean = false) {
+    fun load(country: Country, refresh: Boolean = false, extra: List<Country> = emptyList()) {
         byKey.clear()
         byService.clear()
         if (refresh) File(context.cacheDir, "picons").deleteRecursively()
         val services = parseIndex(index("srp.index", refresh))
-        byService += servicesFor(services, PREFERRED_NAMESPACES[country.isoCode])
+        val preferred = (listOf(country) + extra).flatMap { PREFERRED_NAMESPACES[it.isoCode].orEmpty() }
+        byService += servicesFor(services, preferred)
         // Service names come from every satellite and country, so they are only a fallback.
         for ((name, logo) in parseIndex(index("snp.index", refresh))) {
             for (key in NameMatcher.logoKeys(name)) byKey.putIfAbsent(key, LogoEntry(logo, LogoEntry.INTERNATIONAL))
@@ -297,7 +317,11 @@ class PiconsSource(private val context: Context) {
          * Satellite namespaces (orbital position) whose services win when the same IDs are used
          * on several satellites: the TV provider does not say which satellite a channel is on.
          */
-        private val PREFERRED_NAMESPACES = mapOf("TR" to "1A40000") // Türksat 42°E
+        private val PREFERRED_NAMESPACES = mapOf(
+            "TR" to listOf("1A40000"), // Türksat 42°E
+            // Romanian packages: Thor 0.8°W, Hellas Sat 39°E, Eutelsat 16°E, Astra 23.5°E
+            "RO" to listOf("E080000", "1860000", "A00000", "EB0000")
+        )
 
         /** "key=value" lines; comments and malformed lines are skipped. */
         internal fun parseIndex(lines: List<String>): List<Pair<String, String>> = lines.mapNotNull { line ->
@@ -308,10 +332,10 @@ class PiconsSource(private val context: Context) {
 
         /**
          * "SID_TSID_ONID" → logo name from service references "SID_TSID_ONID_NAMESPACE". When
-         * satellites disagree about a service, [preferredNamespace]'s logo is used; if none of
-         * them is preferred, the service is left out rather than guessed.
+         * satellites disagree about a service, the logo of the [preferredNamespaces] is used; if
+         * none or several disagreeing ones are preferred, the service is left out rather than guessed.
          */
-        internal fun servicesFor(references: List<Pair<String, String>>, preferredNamespace: String?): Map<String, String> {
+        internal fun servicesFor(references: List<Pair<String, String>>, preferredNamespaces: Collection<String>): Map<String, String> {
             val byIds = LinkedHashMap<String, MutableList<Pair<String, String>>>()
             for ((reference, logo) in references) {
                 val parts = reference.uppercase().split('_')
@@ -320,7 +344,7 @@ class PiconsSource(private val context: Context) {
             }
             val result = HashMap<String, String>()
             for ((ids, logos) in byIds) {
-                val preferred = logos.filter { it.first == preferredNamespace }.map { it.second }.distinct()
+                val preferred = logos.filter { it.first in preferredNamespaces }.map { it.second }.distinct()
                 val all = logos.map { it.second }.distinct()
                 when {
                     preferred.size == 1 -> result[ids] = preferred[0]
@@ -385,32 +409,58 @@ class UsbLogoSource {
 
 /**
  * Logos from the iptv-org database (github.com/iptv-org/database, public domain data): channel
- * names and alternative names with links to logos hosted elsewhere. The two JSON files are ~14 MB,
- * so they are read as streams into a compact index that is kept for a week.
+ * names and alternative names with links to logos hosted elsewhere. The two JSON files are ~14 MB
+ * and take ~20 s to read on a TV, so the app ships a snapshot (assets, made by
+ * tools/iptv_org_snapshot.py) and downloads a fresh list in the background once a week.
+ *
+ * Both are kept as "name \t logo URL \t country" rows; tiers follow the TV's country (and any
+ * [Country.EXTRA] whose channels the TV carries) when loading, so no rebuild is needed for them.
  */
 class IptvOrgSource(private val context: Context) {
 
+    private class Row(val name: String, val url: String, val country: String)
+
     private val byKey = HashMap<String, LogoEntry<String>>()
+    private var rows: List<Row>? = null
+    private val list get() = File(context.filesDir, LIST)
 
     val size: Int get() = byKey.size
 
-    fun load(country: Country, refresh: Boolean = false) {
+    /** The downloaded list is missing or older than a week: [refreshList] should run. */
+    val stale: Boolean get() = !list.exists() || System.currentTimeMillis() - list.lastModified() > LIST_MAX_AGE_MS
+
+    /** [refresh] downloads the list first (and fails if that fails); otherwise nothing is downloaded. */
+    fun load(country: Country, refresh: Boolean = false, extra: List<Country> = emptyList()) {
+        if (refresh) {
+            File(context.cacheDir, "iptv").deleteRecursively()
+            download()
+        }
+        val all = rows ?: readRows().also { rows = it }
+        val tiered = all.map { row ->
+            val tier = when (row.country) {
+                country.isoCode -> LogoEntry.COUNTRY
+                in extra.map { it.isoCode } -> LogoEntry.INTERNATIONAL
+                else -> LogoEntry.OTHER
+            }
+            tier to row
+        }.sortedBy { it.first } // stable: list order kept within a tier
         byKey.clear()
-        if (refresh) File(context.cacheDir, "iptv").deleteRecursively()
-        val index = File(context.filesDir, "iptv-org-${country.isoCode}.tsv")
-        if (refresh || !index.exists() || System.currentTimeMillis() - index.lastModified() > INDEX_MAX_AGE_MS) {
-            runCatching { build(country, index) }.onFailure { if (!index.exists()) throw it }
+        for ((tier, row) in tiered) {
+            for (key in NameMatcher.logoKeys(row.name)) byKey.putIfAbsent(key, LogoEntry(row.url, tier))
         }
-        index.forEachLine { line ->
-            val fields = line.split('\t')
-            if (fields.size == 3) byKey.putIfAbsent(fields[0], LogoEntry(fields[1], fields[2].toInt()))
-        }
+    }
+
+    /** Downloads a fresh list when [stale]; used in the background. Returns whether it did. */
+    fun refreshList(): Boolean {
+        if (!stale) return false
+        download()
+        return true
     }
 
     fun entries(): Map<String, LogoEntry<String>> = byKey
 
-    /** When the index was last built from iptv-org (0 if never). */
-    fun updatedAt(country: Country): Long = File(context.filesDir, "iptv-org-${country.isoCode}.tsv").lastModified()
+    /** When the list was last downloaded (0 if the bundled snapshot is in use). */
+    fun updatedAt(): Long = list.lastModified()
 
     fun read(url: String): ByteArray {
         val cached = File(File(context.cacheDir, "iptv"), url.hashCode().toUInt().toString(16))
@@ -421,7 +471,16 @@ class IptvOrgSource(private val context: Context) {
         return bytes
     }
 
-    private fun build(country: Country, index: File) {
+    private fun readRows(): List<Row> {
+        val lines = if (list.exists()) list.readLines()
+        else context.assets.open(SNAPSHOT).use { java.util.zip.GZIPInputStream(it).bufferedReader().readLines() }
+        return lines.mapNotNull { line ->
+            val fields = line.split('\t')
+            if (fields.size == 3) Row(fields[0], fields[1], fields[2]) else null
+        }
+    }
+
+    private fun download() {
         // Channel id → logo URL: the channel's own logo (not a feed's), raster formats only.
         val logos = HashMap<String, String>()
         stream("$API/logos.json") { reader ->
@@ -446,45 +505,43 @@ class IptvOrgSource(private val context: Context) {
             }
             reader.endArray()
         }
-        // Names → logo, the TV's country first.
-        val rows = ArrayList<Triple<Int, String, String>>()
-        stream("$API/channels.json") { reader ->
-            reader.beginArray()
-            while (reader.hasNext()) {
-                var id: String? = null
-                var countryCode: String? = null
-                val names = ArrayList<String>()
-                reader.beginObject()
+        val partial = File(list.path + ".part")
+        partial.bufferedWriter().use { out ->
+            stream("$API/channels.json") { reader ->
+                reader.beginArray()
                 while (reader.hasNext()) {
-                    when (reader.nextName()) {
-                        "id" -> id = reader.nextStringOrNull()
-                        "country" -> countryCode = reader.nextStringOrNull()
-                        "name" -> reader.nextStringOrNull()?.let { names += it }
-                        "alt_names" -> {
-                            reader.beginArray()
-                            while (reader.hasNext()) reader.nextStringOrNull()?.let { names += it }
-                            reader.endArray()
+                    var id: String? = null
+                    var countryCode: String? = null
+                    val names = ArrayList<String>()
+                    reader.beginObject()
+                    while (reader.hasNext()) {
+                        when (reader.nextName()) {
+                            "id" -> id = reader.nextStringOrNull()
+                            "country" -> countryCode = reader.nextStringOrNull()
+                            "name" -> reader.nextStringOrNull()?.let { names += it }
+                            "alt_names" -> {
+                                reader.beginArray()
+                                while (reader.hasNext()) reader.nextStringOrNull()?.let { names += it }
+                                reader.endArray()
+                            }
+                            else -> reader.skipValue()
                         }
-                        else -> reader.skipValue()
+                    }
+                    reader.endObject()
+                    val url = logos[id] ?: continue
+                    for (name in names.distinct()) {
+                        out.append(name.replace('\t', ' ').replace('\n', ' ')).append('\t').append(url).append('\t')
+                            .append(countryCode.orEmpty()).append('\n')
                     }
                 }
-                reader.endObject()
-                val url = logos[id] ?: continue
-                val tier = if (countryCode == country.isoCode) LogoEntry.COUNTRY else LogoEntry.OTHER
-                for (name in names) rows += Triple(tier, name, url)
+                reader.endArray()
             }
-            reader.endArray()
         }
-        rows.sortBy { it.first }
-        val keys = LinkedHashMap<String, Pair<String, Int>>()
-        for ((tier, name, url) in rows) {
-            for (key in NameMatcher.logoKeys(name)) keys.putIfAbsent(key, url to tier)
-        }
-        val partial = File(index.path + ".part")
-        partial.bufferedWriter().use { out ->
-            for ((key, value) in keys) out.append(key).append('\t').append(value.first).append('\t').append(value.second.toString()).append('\n')
-        }
-        partial.renameTo(index)
+        check(partial.length() > 0) { "iptv-org list is empty" }
+        partial.renameTo(list)
+        rows = null
+        // Lists of the earlier per-country format are no longer read.
+        context.filesDir.listFiles { f -> f.name.startsWith("iptv-org-") && f.name != LIST }?.forEach { it.delete() }
     }
 
     private fun stream(url: String, read: (JsonReader) -> Unit) {
@@ -505,7 +562,9 @@ class IptvOrgSource(private val context: Context) {
 
     private companion object {
         const val API = "https://iptv-org.github.io/api"
-        const val INDEX_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000L
+        const val LIST = "iptv-org-channels.tsv"
+        const val SNAPSHOT = "iptv-org-channels.tsv.gz"
+        const val LIST_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000L
     }
 }
 
@@ -549,6 +608,24 @@ object LogoImage {
         val top = (HEIGHT - height) / 2
         Canvas(out).drawBitmap(source, null, RectF(left, top, left + width, top + height), Paint(Paint.FILTER_BITMAP_FLAG))
         return png(out)
+    }
+
+    /** [LogoQuality] issues of a downloaded logo (its original size, before [fit]). */
+    fun quality(bytes: ByteArray): Set<LogoQuality.Issue> {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return emptySet()
+        // Colours are judged on a reduced copy; the size check uses the real size.
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 128) sample *= 2
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: return emptySet()
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val issues = LogoQuality.assess(bitmap.width, bitmap.height, pixels).toMutableSet()
+        issues.remove(LogoQuality.Issue.SMALL)
+        if (maxOf(bounds.outWidth, bounds.outHeight) < LogoQuality.MIN_SIDE) issues += LogoQuality.Issue.SMALL
+        return issues
     }
 
     /** An SVG logo drawn into a PNG whose longer side is [SVG_SIZE] px; [fit] shrinks it later. */
