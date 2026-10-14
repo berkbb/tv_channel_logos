@@ -115,9 +115,30 @@ class TvShell(private val context: Context) : AutoCloseable {
      * fresh cache). `am kill` is not enough: it spares these system apps' service processes.
      */
     private fun refreshTvUi() {
-        val command = TV_UI_PACKAGES.joinToString("; ") { "am force-stop $it" }
+        val command = liveTvPackages().joinToString("; ") { "am force-stop $it" }
         runCatching { withConnection { it.shell(command) } }
             .onFailure { android.util.Log.w("ChannelLogos", "Could not refresh the TV's channel screens", it) }
+    }
+
+    /**
+     * Apps that show the TV's channels: Philips' live TV app, plus whatever the TV offers for
+     * opening a channel (Android TV's live TV app answers "view" on a channel address on every
+     * brand). This app is left out, and so are the TV inputs' own services, which tune the picture.
+     */
+    private fun liveTvPackages(): Set<String> {
+        val packages = LinkedHashSet(TV_UI_PACKAGES)
+        runCatching {
+            val view = android.content.Intent(android.content.Intent.ACTION_VIEW, android.media.tv.TvContract.buildChannelUri(1))
+            @Suppress("DEPRECATION")
+            context.packageManager.queryIntentActivities(view, 0).mapTo(packages) { it.activityInfo.packageName }
+        }.onFailure { android.util.Log.w("ChannelLogos", "Could not look up the live TV app", it) }
+        packages.remove(context.packageName)
+        // Stopping a tuner input's own package could cut the picture or a recording.
+        val manager = context.getSystemService(Context.TV_INPUT_SERVICE) as? TvInputManager
+        runCatching { manager?.tvInputList?.map { it.serviceInfo.packageName } }.getOrNull()
+            ?.filterNot { it in TV_UI_PACKAGES }
+            ?.forEach(packages::remove)
+        return packages
     }
 
     /** The current logos of [ids] (channels without a logo are missing from the result). */

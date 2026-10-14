@@ -9,6 +9,18 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
+    <!-- Android 11+: lets the app see which app opens TV channels (to refresh its logo cache) -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="content" android:host="android.media.tv" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="vnd.android.cursor.item/channel" />
+        </intent>
+    </queries>
+
     <uses-feature
         android:name="android.software.leanback"
         android:required="false" />
