@@ -28,13 +28,14 @@ change, restore original). Before writing, a full-screen check lists how many lo
 existing ones and which look poor; the first write backs up all logos automatically, and the
 backup can be exported to a USB stick for another TV. Long tasks show a full-screen progress ring
 and end with a full-screen result or an explained error. "Change" on a row shows the current logo
-and picks another one, one from a USB stick, or none.
+and picks another one, any image from a USB stick or the TV's storage (by name or through the
+folder browser), or none.
 
 ## Logo sources
 
 | Source | What | Notes |
 |--------|------|-------|
-| USB | PNG/JPEG/WebP files on a USB stick, matched by file name | preferred, treated as safe |
+| Files | PNG/JPEG/WebP files on a USB stick or in the TV's storage, matched by file name or picked in the folder browser | preferred, treated as safe |
 | TV table | logos built into Philips firmware (`tvcontentprovider.apk`) | read-only, fixed at the firmware's date |
 | GitHub | [tv-logo/tv-logos](https://github.com/tv-logo/tv-logos), country + international/UK/US folders | no license: downloaded on the TV for personal use, nothing bundled |
 | picons | [picons/picons](https://github.com/picons/picons), logos linked to DVB services (SID/TSID/ONID) and service names | GPL-3.0: downloaded on the TV, nothing bundled; a service match whose name agrees is preselected |

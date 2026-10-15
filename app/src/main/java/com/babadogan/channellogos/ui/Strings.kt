@@ -187,15 +187,26 @@ object Strings {
     val sourceIptv get() = "iptv-org"
     val sourceText get() = t("Yazılı logo", "Drawn logo", "Logo desenat")
     val sourceFile get() = "USB"
-    val pickFromUsb get() = t("USB'den Seç", "Pick from USB", "Alege de pe USB")
+    val sourceInternal get() = t("TV hafızası", "TV storage", "Memoria TV")
+    val filesSource get() = t("Dosyalar", "Files", "Fișiere")
+    val pickFromFiles get() = t("Dosyalardan Seç", "Pick from Files", "Alege din fișiere")
+    val browseFolders get() = t("Klasörlerde Gez", "Browse Folders", "Răsfoiește dosarele")
     val backToSuggestions get() = t("Önerilere Dön", "Back to Suggestions", "Înapoi la sugestii")
-    fun usbTitle(channel: String) = t("USB'den logo: $channel", "Logo from USB: $channel", "Logo de pe USB: $channel")
-    val usbEmpty get() = t(
-        "USB bellekte resim bulunamadı. PNG veya JPG dosyalarını belleğe kopyalayıp takın; dosya adı kanal adıyla aynıysa (ör. \"ATV HD.png\") logo kendiliğinden eşleşir.",
-        "No images found on a USB stick. Copy PNG or JPG files to a stick and plug it in; a file named like the channel (e.g. \"ATV HD.png\") is matched automatically.",
-        "Nu s-au găsit imagini pe stick-ul USB. Copiați fișiere PNG sau JPG pe un stick și conectați-l; un fișier numit ca și canalul (de ex. „PRO TV HD.png”) este asociat automat."
+    fun filesTitle(channel: String) = t("Dosyadan logo: $channel", "Logo from a file: $channel", "Logo dintr-un fișier: $channel")
+    fun browseTitle(channel: String) = t("Klasörler: $channel", "Folders: $channel", "Dosare: $channel")
+    val filesEmpty get() = t(
+        "USB bellekte veya TV hafızasında resim bulunamadı. PNG, JPG veya WebP dosyalarını belleğe kopyalayıp takın; dosya adı kanal adıyla aynıysa (ör. \"ATV HD.png\") logo kendiliğinden eşleşir.",
+        "No images found on a USB stick or in the TV's storage. Copy PNG, JPG or WebP files to a stick and plug it in; a file named like the channel (e.g. \"ATV HD.png\") is matched automatically.",
+        "Nu s-au găsit imagini pe stick-ul USB sau în memoria televizorului. Copiați fișiere PNG, JPG sau WebP pe un stick și conectați-l; un fișier numit ca și canalul (de ex. „PRO TV HD.png”) este asociat automat."
     )
-    fun usbStats(count: Int) = t("USB: $count resim", "USB: $count images", "USB: $count imagini")
+    val noPlaces get() = t(
+        "Takılı USB bellek yok ve TV hafızası okunamıyor. Uygulamaya depolama izni verildiğinden emin olun.",
+        "No USB stick is plugged in and the TV's storage cannot be read. Make sure the app has the storage permission.",
+        "Niciun stick USB conectat, iar memoria televizorului nu poate fi citită. Verificați că aplicația are permisiunea de stocare."
+    )
+    val folderEmpty get() = t("Bu klasörde resim ya da klasör yok.", "This folder has no images or folders.", "Acest dosar nu are imagini sau dosare.")
+    val upFolder get() = t("Üst klasör", "Up one folder", "Dosarul părinte")
+    fun fileStats(count: Int) = t("Dosyalar: $count resim", "Files: $count images", "Fișiere: $count imagini")
     val check get() = t("kontrol et", "check", "verifică")
     val exact get() = t("tam eşleşme", "exact match", "potrivire exactă")
     val close get() = t("yakın eşleşme", "close match", "potrivire apropiată")

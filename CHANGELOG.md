@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Logos from the TV's storage**: images in the TV's own storage are matched by name like those
+  on a USB stick ("USB" in the sources setting is now "Files"). App data (`Android`), lost files
+  and the logo backups are not searched; for the same name a stick's file wins.
+- **Folder browser**: "Change" → "Browse Folders" opens the USB sticks and the TV's storage and
+  walks their folders, so any image can be picked whatever its name. Back goes up a folder.
+  "Pick from USB" is now "Pick from Files" and lists the images of both places.
+
+### Fixed
+- **USB sticks prepared on a Mac**: hidden files (macOS's `._name.png` metadata) are no longer
+  taken for logos. They had the same name as the real logo and hid it, and showed up as broken
+  images in "Pick from USB".
+- Large photos are decoded reduced before they are fitted into the logo box.
+
 ---
 
 ## [1.2.0] - 2026-10-14

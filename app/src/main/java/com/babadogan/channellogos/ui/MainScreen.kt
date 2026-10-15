@@ -73,12 +73,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.babadogan.channellogos.logos.FileLogoSource
 import com.babadogan.channellogos.logos.LogoCandidate
 import com.babadogan.channellogos.logos.LogoMatching
 import com.babadogan.channellogos.logos.LogoSource
 import com.babadogan.channellogos.logos.NameMatcher
 import com.babadogan.channellogos.settings.Settings
 import com.babadogan.channellogos.tv.Channel
+import java.io.File
 
 /** Light or dark palette (AynaCast's); Compose state, so switching redraws everything. */
 private object Palette {
@@ -289,7 +291,7 @@ private fun SidePanel(
                         Text(Strings.channelStats(state.channels.size, state.withLogo, state.radios), color = TextPrimary, fontSize = 14.sp)
                     }
                     Text(Strings.sourceStats(state.tvLogos, state.gitHubLogos, state.piconsLogos, state.iptvLogos), color = TextSecondary, fontSize = 13.sp)
-                    if (state.usbLogos > 0) Text(Strings.usbStats(state.usbLogos), color = TextSecondary, fontSize = 13.sp)
+                    if (state.fileLogos > 0) Text(Strings.fileStats(state.fileLogos), color = TextSecondary, fontSize = 13.sp)
                     if (state.sourcesUpdatedAt > 0L) {
                         val date = Strings.dateTime(state.sourcesUpdatedAt)
                         Text(Strings.sourcesUpdatedAt(date), color = TextSecondary, fontSize = 13.sp)
@@ -545,10 +547,12 @@ private fun TvDialog(
      * remote's up/down keys scroll it. Bodies with buttons scroll by following the focus instead.
      */
     textBody: Boolean = false,
+    /** What the remote's Back key does, when it should not close the dialog (e.g. a folder up). */
+    onBack: (() -> Unit)? = null,
     body: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
 ) {
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = onBack ?: onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(
@@ -835,20 +839,42 @@ private fun CloseButton(onClick: () -> Unit) {
 @Composable
 private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Boolean, onDismiss: () -> Unit) {
     val state by viewModel.state.collectAsState()
-    var fromUsb by remember { mutableStateOf(false) }
-    val candidates = remember(channel.id, fromUsb) {
-        if (fromUsb) viewModel.usbCandidatesFor(channel) else viewModel.candidatesFor(channel)
+    var mode by remember { mutableStateOf(PickMode.SUGGESTIONS) }
+    // The folder shown while browsing; null lists the USB sticks and the TV's storage.
+    var folder by remember { mutableStateOf<File?>(null) }
+    val places = remember(mode) { if (mode == PickMode.BROWSE) viewModel.filePlaces() else emptyList() }
+    val candidates = remember(channel.id, mode) {
+        when (mode) {
+            PickMode.SUGGESTIONS -> viewModel.candidatesFor(channel)
+            PickMode.FILES -> viewModel.fileCandidatesFor(channel)
+            PickMode.BROWSE -> emptyList()
+        }
+    }
+    val entries = remember(mode, folder) { folder?.let { viewModel.browse(it) }.orEmpty() }
+    // Back goes up a folder, then leaves the browser; it closes the dialog only from the suggestions.
+    val goBack: (() -> Unit)? = when {
+        mode != PickMode.BROWSE -> null
+        folder == null -> ({ mode = PickMode.SUGGESTIONS })
+        else -> ({ folder = folder?.parentFile?.takeIf { parent -> places.none { it.dir == folder } } })
     }
     TvDialog(
-        title = if (fromUsb) Strings.usbTitle(channel.name) else "${Strings.pickTitle}: ${channel.name}",
+        title = when (mode) {
+            PickMode.SUGGESTIONS -> "${Strings.pickTitle}: ${channel.name}"
+            PickMode.FILES -> Strings.filesTitle(channel.name)
+            PickMode.BROWSE -> Strings.browseTitle(channel.name)
+        },
         onDismiss = onDismiss,
+        onBack = goBack,
         maxWidth = 620.dp,
         scrollBody = false,
         footer = {
-            if (fromUsb) TvButton(Strings.backToSuggestions, onClick = { fromUsb = false })
-            else TvButton(Strings.pickFromUsb, onClick = { fromUsb = true })
-            TvButton(Strings.noLogoOption, onClick = { viewModel.choose(channel.id, null); onDismiss() })
-            if (changed) TvButton(Strings.resetOne, onClick = { viewModel.resetToDefault(listOf(channel.id)); onDismiss() })
+            if (mode != PickMode.SUGGESTIONS) TvButton(Strings.backToSuggestions, onClick = { mode = PickMode.SUGGESTIONS })
+            if (mode != PickMode.FILES) TvButton(Strings.pickFromFiles, onClick = { mode = PickMode.FILES })
+            if (mode != PickMode.BROWSE) TvButton(Strings.browseFolders, onClick = { folder = null; mode = PickMode.BROWSE })
+            if (mode == PickMode.SUGGESTIONS) {
+                TvButton(Strings.noLogoOption, onClick = { viewModel.choose(channel.id, null); onDismiss() })
+                if (changed) TvButton(Strings.resetOne, onClick = { viewModel.resetToDefault(listOf(channel.id)); onDismiss() })
+            }
         }
     ) {
         // The logo the channel has now, to compare the candidates with.
@@ -867,28 +893,103 @@ private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Bool
         } else {
             Text(Strings.currentLogoNone, color = TextSecondary, fontSize = 14.sp)
         }
-        if (candidates.isEmpty()) Text(if (fromUsb) Strings.usbEmpty else Strings.noCandidates, color = TextSecondary, fontSize = 14.sp)
+        if (mode == PickMode.BROWSE) {
+            FolderBrowser(
+                places = places,
+                folder = folder,
+                entries = entries,
+                viewModel = viewModel,
+                onOpen = { folder = it },
+                onUp = { goBack?.invoke() },
+                onPick = { file -> viewModel.choose(channel.id, viewModel.fileCandidate(file)); onDismiss() }
+            )
+            return@TvDialog
+        }
+        if (candidates.isEmpty()) Text(if (mode == PickMode.FILES) Strings.filesEmpty else Strings.noCandidates, color = TextSecondary, fontSize = 14.sp)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(candidates, key = { it.id }) { candidate ->
-                FocusBox(onClick = { viewModel.choose(channel.id, candidate); onDismiss() }) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        LogoPreview(candidate, viewModel)
-                        Spacer(Modifier.width(16.dp))
-                        Column {
-                            Text(candidate.name.substringAfterLast('/'), color = TextPrimary, fontSize = 15.sp)
-                            Row {
-                                Text(sourceLabel(candidate), color = TextSecondary, fontSize = 12.sp)
-                                state.poorLogos[candidate.id]?.let { issues ->
-                                    Text("  ·  ${qualityLabel(issues)}", color = Orange, fontSize = 12.sp)
-                                }
-                            }
-                        }
-                    }
+                CandidateRow(candidate, viewModel, state.poorLogos[candidate.id]) { viewModel.choose(channel.id, candidate); onDismiss() }
+            }
+        }
+    }
+}
+
+private enum class PickMode { SUGGESTIONS, FILES, BROWSE }
+
+@Composable
+private fun CandidateRow(candidate: LogoCandidate, viewModel: MainViewModel, issues: Set<com.babadogan.channellogos.logos.LogoQuality.Issue>?, onClick: () -> Unit) {
+    FocusBox(onClick = onClick) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            LogoPreview(candidate, viewModel)
+            Spacer(Modifier.width(16.dp))
+            Column {
+                Text(candidate.name.substringAfterLast('/'), color = TextPrimary, fontSize = 15.sp)
+                Row {
+                    Text(sourceLabel(candidate), color = TextSecondary, fontSize = 12.sp)
+                    issues?.let { Text("  ·  ${qualityLabel(it)}", color = Orange, fontSize = 12.sp) }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Folders on the USB sticks and in the TV's storage, for picking any image whatever its name:
+ * the places first, then one folder at a time with its subfolders and images.
+ */
+@Composable
+private fun FolderBrowser(
+    places: List<FileLogoSource.Place>,
+    folder: File?,
+    entries: List<File>,
+    viewModel: MainViewModel,
+    onOpen: (File) -> Unit,
+    onUp: () -> Unit,
+    onPick: (File) -> Unit
+) {
+    val state by viewModel.state.collectAsState()
+    // Each folder opens with the remote on its first row, not on the dialog's close button.
+    val first = remember { FocusRequester() }
+    LaunchedEffect(folder) { runCatching { first.requestFocus() } }
+    if (folder == null) {
+        if (places.isEmpty()) Text(Strings.noPlaces, color = TextSecondary, fontSize = 14.sp)
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(places, key = { it.dir.path }) { place ->
+                val label = if (place.internal) Strings.placeInternal else "${Strings.placeUsb} (${place.dir.name})"
+                val modifier = if (place == places.first()) Modifier.focusRequester(first) else Modifier
+                FolderRow(if (place.internal) "📺" else "💾", label, modifier) { onOpen(place.dir) }
+            }
+        }
+        return
+    }
+    Text(folder.path, color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item(key = "up") { FolderRow("↑", Strings.upFolder, Modifier.focusRequester(first), onUp) }
+        if (entries.isEmpty()) item(key = "empty") { Text(Strings.folderEmpty, color = TextSecondary, fontSize = 14.sp) }
+        items(entries, key = { it.path }) { file ->
+            if (file.isDirectory) {
+                FolderRow("📁", file.name) { onOpen(file) }
+            } else {
+                val candidate = viewModel.fileCandidate(file)
+                CandidateRow(candidate, viewModel, state.poorLogos[candidate.id]) { onPick(file) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FolderRow(icon: String, name: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    FocusBox(onClick = onClick, modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(icon, color = TextPrimary, fontSize = 20.sp)
+            Spacer(Modifier.width(16.dp))
+            Text(name, color = TextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -932,7 +1033,7 @@ private fun SettingsDialog(settings: Settings, onChange: (Settings) -> Unit, onD
                 Triple("GitHub", settings.gitHub) { on: Boolean -> settings.copy(gitHub = on) },
                 Triple("picons", settings.picons) { on: Boolean -> settings.copy(picons = on) },
                 Triple("iptv-org", settings.iptv) { on: Boolean -> settings.copy(iptv = on) },
-                Triple("USB", settings.usb) { on: Boolean -> settings.copy(usb = on) }
+                Triple(Strings.filesSource, settings.usb) { on: Boolean -> settings.copy(usb = on) }
             )) {
                 TvButton(if (value) "✓ $label" else label, selected = value, small = true, onClick = { onChange(update(!value)) })
             }
@@ -1134,7 +1235,7 @@ private fun sourceLabel(candidate: LogoCandidate) = when (candidate.source) {
     LogoSource.PICONS -> Strings.sourcePicons
     LogoSource.IPTV -> Strings.sourceIptv
     LogoSource.TEXT -> Strings.sourceText
-    LogoSource.FILE -> Strings.sourceFile
+    LogoSource.FILE -> if (FileLogoSource.isInternal(candidate.name)) Strings.sourceInternal else Strings.sourceFile
 }
 
 private fun qualityLabel(issues: Set<com.babadogan.channellogos.logos.LogoQuality.Issue>) =

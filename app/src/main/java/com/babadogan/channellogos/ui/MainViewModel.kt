@@ -13,7 +13,7 @@ import com.babadogan.channellogos.logos.ForeignChannels
 import com.babadogan.channellogos.logos.GitHubLogoSource
 import com.babadogan.channellogos.logos.IptvOrgSource
 import com.babadogan.channellogos.logos.PiconsSource
-import com.babadogan.channellogos.logos.UsbLogoSource
+import com.babadogan.channellogos.logos.FileLogoSource
 import com.babadogan.channellogos.logos.LogoEntry
 import com.babadogan.channellogos.logos.LogoCandidate
 import com.babadogan.channellogos.logos.LogoImage
@@ -109,7 +109,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val gitHubLogos: Int = 0,
         val piconsLogos: Int = 0,
         val iptvLogos: Int = 0,
-        val usbLogos: Int = 0,
+        val fileLogos: Int = 0,
         /** When the online catalogues were last downloaded (epoch ms, 0 if never). */
         val sourcesUpdatedAt: Long = 0L,
         val tvTableMissing: Boolean = false,
@@ -136,7 +136,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val gitHub = GitHubLogoSource(application)
     private val picons = PiconsSource(application)
     private val iptv = IptvOrgSource(application)
-    private val usb = UsbLogoSource()
+    private val fileLogos = FileLogoSource()
     private val backups = LogoBackups(application)
     private val country = Country.ofDevice()
     /** See ForeignChannels: added once the channel list shows the TV carries their channels. */
@@ -259,9 +259,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun readChannels(): List<Channel> {
-        // A USB stick may have been plugged in since the last scan.
-        runCatching { usb.load() }.onFailure { Log.w(TAG, "USB logos", it) }
-        _state.update { it.copy(usbLogos = usb.size) }
+        // A USB stick may have been plugged in, or files copied to the TV, since the last scan.
+        runCatching { fileLogos.load() }.onFailure { Log.w(TAG, "File logos", it) }
+        _state.update { it.copy(fileLogos = fileLogos.size) }
         val t0 = System.currentTimeMillis()
         return shellLock.withLock { shell.listChannels() }
             .sortedWith(compareBy({ it.number.toIntOrNull() ?: Int.MAX_VALUE }, { it.name }))
@@ -341,11 +341,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun candidatesFor(channel: Channel): List<LogoCandidate> =
         LogoMatching.candidates(channel.name, catalogs(), channel.serviceKey)
 
-    /** Every image on the USB stick for [channel], those named like it first. */
-    fun usbCandidatesFor(channel: Channel): List<LogoCandidate> {
+    /** Every image on USB sticks and in the TV's storage for [channel], those named like it first. */
+    fun fileCandidatesFor(channel: Channel): List<LogoCandidate> {
         val keys = com.babadogan.channellogos.logos.NameMatcher.channelKeys(channel.name).map { it.first }
         val base = keys.firstOrNull()?.let { com.babadogan.channellogos.logos.NameMatcher.withoutQuality(it) ?: it }.orEmpty()
-        return usb.files()
+        return fileLogos.files()
             .sortedBy { file ->
                 val key = com.babadogan.channellogos.logos.NameMatcher.key(file.nameWithoutExtension)
                 when {
@@ -354,10 +354,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     else -> 2
                 }
             }
-            .map { file ->
-                LogoCandidate(LogoSource.FILE, file.path, com.babadogan.channellogos.logos.NameMatcher.Strength.LOOSE, "file:${file.path}", LogoEntry.COUNTRY)
-            }
+            .map { fileCandidate(it) }
     }
+
+    /** Where the file browser starts: USB sticks, then the TV's storage. */
+    fun filePlaces(): List<FileLogoSource.Place> = fileLogos.places()
+
+    /** The folders and images of [dir], for the file browser. */
+    fun browse(dir: File): List<File> = fileLogos.browse(dir)
+
+    fun fileCandidate(file: File): LogoCandidate =
+        LogoCandidate(LogoSource.FILE, file.path, com.babadogan.channellogos.logos.NameMatcher.Strength.LOOSE, "file:${file.path}", LogoEntry.COUNTRY)
 
     /** Preview image of a logo, fitted like it will be written; null while it cannot be loaded. */
     suspend fun preview(candidate: LogoCandidate): ImageBitmap? {
@@ -751,7 +758,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun catalogs(): LogoMatching.Catalogs {
         val settings = _state.value.settings
         return LogoMatching.Catalogs(
-            files = if (settings.usb) usb.entries() else emptyMap(),
+            files = if (settings.usb) fileLogos.entries() else emptyMap(),
             tv = builtIn.entries(),
             gitHub = if (settings.gitHub) gitHub.entries() else emptyMap(),
             picons = if (settings.picons) picons.entries() else emptyMap(),
@@ -768,7 +775,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             LogoSource.PICONS -> picons.read(ref)
             LogoSource.IPTV -> iptv.read(ref)
             LogoSource.TEXT -> LogoImage.text(candidate.name)
-            LogoSource.FILE -> usb.read(ref)
+            LogoSource.FILE -> fileLogos.read(ref)
         }
     }
 

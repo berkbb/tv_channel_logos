@@ -11,12 +11,12 @@
 
 ```
 app/src/main/java/com/babadogan/channellogos/
-├── MainActivity.kt              # Compose host; asks for the storage permission (USB logos)
+├── MainActivity.kt              # Compose host; asks for the storage permission (logo files)
 ├── tool/TvLogoTool.java         # Runs ON the TV as the shell user (app_process); list / write
 ├── tv/TvShell.kt                # dadb connection to localhost:5555, runs TvLogoTool, retries, refreshes the TV UI
 ├── logos/NameMatcher.kt         # Name → key, channel keys (HD/SD/TV/TİCARİ variants), logo keys
 ├── logos/LogoMatching.kt        # Ranking, safe matches, candidates for picking by hand
-├── logos/LogoSources.kt         # USB, TV table, GitHub, picons, iptv-org sources; LogoImage (fit / SVG / drawn logo / quality)
+├── logos/LogoSources.kt         # Files (USB + TV storage), TV table, GitHub, picons, iptv-org sources; LogoImage (fit / SVG / drawn logo / quality)
 ├── logos/LogoQuality.kt         # Flags small logos and dark logos on transparency (pure pixel maths)
 ├── logos/ForeignChannels.kt     # Does the TV carry another country's channels (Country.EXTRA)?
 ├── backup/LogoBackups.kt        # Originals (for "Reset to Default") and the logo backup snapshot
@@ -66,7 +66,7 @@ adb shell app_process -Djava.class.path=$APK /system/bin com.babadogan.channello
 
 | Source | Where it comes from | Cached as |
 |--------|--------------------|-----------|
-| USB | `/storage/<volume>/…` (depth 3, ≤ 3000 images) | rescanned on every scan |
+| Files | `/storage/<volume>/…`, then the TV's storage (depth 3, ≤ 3000 images; hidden files and `Android`, `LOST.DIR`, `ChannelLogosBackup` skipped) | rescanned on every scan |
 | TV table | `com.example.tvcontentprovider` APK: `assets/Logos/ChannelLogoDatabase.db` + `assets/Logos/sys/<id>.png` | `files/tv-logo-index-<country>-<apk size>-<apk date>.tsv` |
 | GitHub | `api.github.com/repos/tv-logo/tv-logos/contents/countries/<folder>` | `files/github-<folder>.json` (1 day), images in `cache/github/` |
 | picons | `raw.githubusercontent.com/picons/picons/master/build-source/{srp,snp}.index`; logos `build-source/logos/<name>.default.png`, else `.svg` (drawn with AndroidSVG) | `files/picons-srp.index`, `files/picons-snp.index` (1 day), images as PNG in `cache/picons/` |

@@ -17,7 +17,7 @@ import java.util.Locale
 import java.util.zip.ZipFile
 
 enum class LogoSource {
-    /** An image on a USB stick, put there by the user: preferred over every catalogue. */
+    /** An image on a USB stick or in the TV's storage, put there by the user: preferred over every catalogue. */
     FILE,
     /** Built into the TV's firmware. */
     TV,
@@ -357,10 +357,13 @@ class PiconsSource(private val context: Context) {
 }
 
 /**
- * Logos on USB sticks (or other removable storage): PNG/JPEG/WebP files, matched by file name
- * ("ATV HD.png", "show-tv.jpg"). Needs the storage read permission.
+ * Logos the user put on a USB stick or in the TV's own storage: PNG/JPEG/WebP files, matched by
+ * file name ("ATV HD.png", "show-tv.jpg") and offered for browsing. Needs the storage read permission.
  */
-class UsbLogoSource {
+class FileLogoSource {
+
+    /** A place to look in: a USB stick, or the TV's shared storage ([internal]). */
+    data class Place(val dir: File, val internal: Boolean)
 
     private val byKey = HashMap<String, LogoEntry<String>>()
     private val all = ArrayList<File>()
@@ -373,7 +376,8 @@ class UsbLogoSource {
     fun load() {
         byKey.clear()
         all.clear()
-        for (volume in volumes()) collect(volume, depth = 0)
+        for (place in places()) collect(place.dir, depth = 0)
+        // Stable sort: for the same name a stick's file stays ahead of the TV's and wins the key.
         all.sortBy { it.name.lowercase() }
         for (file in all) {
             for (key in NameMatcher.logoKeys(file.nameWithoutExtension)) byKey.putIfAbsent(key, LogoEntry(file.path, LogoEntry.COUNTRY))
@@ -384,24 +388,65 @@ class UsbLogoSource {
 
     fun read(path: String): ByteArray = File(path).readBytes()
 
-    /** Removable volumes are mounted under /storage next to the built-in "emulated" one. */
-    private fun volumes(): List<File> =
-        File("/storage").listFiles()?.filter { it.isDirectory && it.name != "emulated" && it.name != "self" && it.canRead() }.orEmpty()
+    /**
+     * USB sticks, then the TV's storage. Removable volumes are mounted under /storage next to the
+     * built-in "emulated" one; links there ("sdcard") lead back to the TV's storage and are skipped.
+     */
+    fun places(): List<Place> {
+        val sticks = File("/storage").listFiles()
+            ?.filter { it.isDirectory && it.name != "emulated" && it.name != "self" && it.canRead() }
+            ?.filter { runCatching { it.canonicalPath == it.absolutePath }.getOrDefault(false) }
+            ?.sortedBy { it.name }
+            .orEmpty()
+            .map { Place(it, internal = false) }
+        @Suppress("DEPRECATION")
+        val internal = android.os.Environment.getExternalStorageDirectory()
+            ?.takeIf { it.canRead() }
+            ?.let { Place(it, internal = true) }
+        return sticks + listOfNotNull(internal)
+    }
+
+    /** One folder for browsing: its folders, then its images, each by name. */
+    fun browse(dir: File): List<File> {
+        val entries = dir.listFiles().orEmpty()
+        val folders = entries.filter { it.isDirectory && isBrowsedFolder(it.name) }.sortedBy { it.name.lowercase() }
+        val images = entries.filter { it.isFile && isLogoFile(it.name) }.sortedBy { it.name.lowercase() }
+        return folders + images
+    }
 
     private fun collect(dir: File, depth: Int) {
         val entries = dir.listFiles() ?: return
         for (entry in entries) {
             if (all.size >= MAX_FILES) return
             if (entry.isDirectory) {
-                if (depth < MAX_DEPTH && !entry.name.startsWith(".")) collect(entry, depth + 1)
-            } else if (entry.extension.lowercase() in EXTENSIONS) {
+                if (depth < MAX_DEPTH && isBrowsedFolder(entry.name)) collect(entry, depth + 1)
+            } else if (isLogoFile(entry.name)) {
                 all += entry
             }
         }
     }
 
-    private companion object {
-        val EXTENSIONS = setOf("png", "jpg", "jpeg", "webp")
+    companion object {
+        /**
+         * An image worth offering. Hidden files are skipped: macOS leaves "._ATV.png" metadata next
+         * to every file it copies, which is no image but has the same key as the real logo.
+         */
+        fun isLogoFile(name: String): Boolean =
+            !name.startsWith(".") && name.substringAfterLast('.', "").lowercase() in EXTENSIONS
+
+        /**
+         * A folder that may hold the user's logos. Hidden folders, apps' data ("Android", where this
+         * app also stages the PNGs it writes) and the logo backups (PNGs named by channel id) are not.
+         */
+        fun isBrowsedFolder(name: String): Boolean =
+            !name.startsWith(".") && name !in SKIPPED_FOLDERS
+
+        /** Whether [path] is in the TV's own storage rather than on a USB stick. */
+        fun isInternal(path: String): Boolean =
+            path.startsWith("/storage/emulated/") || path.startsWith("/sdcard/")
+
+        private val EXTENSIONS = setOf("png", "jpg", "jpeg", "webp")
+        private val SKIPPED_FOLDERS = setOf("Android", "LOST.DIR", com.babadogan.channellogos.backup.LogoBackups.USB_FOLDER)
         const val MAX_DEPTH = 3
         const val MAX_FILES = 3000
     }
@@ -598,7 +643,13 @@ object LogoImage {
     const val HEIGHT = 104
 
     fun fit(png: ByteArray): ByteArray {
-        val source = BitmapFactory.decodeByteArray(png, 0, png.size) ?: error("Not an image")
+        // A photo picked from the TV's storage can be 12 MP: decode it reduced, still well above the box.
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(png, 0, png.size, bounds)
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= WIDTH * 2 && bounds.outHeight / (sample * 2) >= HEIGHT * 2) sample *= 2
+        val source = BitmapFactory.decodeByteArray(png, 0, png.size, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: error("Not an image")
         if (source.width == WIDTH && source.height == HEIGHT) return png
         val scale = minOf(WIDTH.toFloat() / source.width, HEIGHT.toFloat() / source.height)
         val width = source.width * scale
