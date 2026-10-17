@@ -32,7 +32,7 @@ class StringsTest {
             for ((name, text) in texts) assertTrue("$name is blank in $language", text.isNotBlank())
         }
         // Proper names and words the languages share aside, every two languages really differ
-        val properNames = setOf("getSourceTv", "getSourceGitHub", "getSourcePicons", "getSourceIptv", "getSourceFile", "getAboutCompany")
+        val properNames = setOf("getSourceTv", "getSourceGitHub", "getSourcePicons", "getSourceIptv", "getSourceFile", "getAboutDeveloper", "getAboutWebsite")
         val sharedWords = mapOf(("ro" to "tr") to setOf("getLanguageSystem")) // "Sistem"
         for (a in Strings.LANGUAGES) for (b in Strings.LANGUAGES) {
             if (a >= b) continue

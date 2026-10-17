@@ -84,6 +84,13 @@ object Strings {
     val refreshSources get() = t("Logoları İnternetten Güncelle", "Update Logos from the Internet", "Actualizează logo-urile de pe internet")
     val updatingSources get() = t("Logo kaynakları internetten güncelleniyor…", "Updating logo sources from the internet…", "Se actualizează sursele de logo-uri de pe internet…")
     val sourcesUpdated get() = t("Logo kaynakları güncellendi.", "Logo sources updated.", "Sursele de logo-uri au fost actualizate.")
+    // ─── Badges on the main screen ───
+    fun channelCount(count: Int) = t("$count kanal", "$count channels", "$count canale")
+    fun withLogoCount(count: Int) = t("$count logolu", "$count with logo", "$count cu logo")
+    fun withoutLogoCount(count: Int) = t("$count logosuz", "$count without logo", "$count fără logo")
+    fun radioCount(count: Int) = t("$count radyo", "$count radio", "$count posturi radio")
+    val actionsSection get() = t("İşlemler", "Actions", "Acțiuni")
+
     fun sourcesUpdatedAt(date: String) = t("İnternet kaynakları: $date", "Online sources: $date", "Surse online: $date")
     fun apply(count: Int) = t("Seçilenleri Yaz ($count)", "Write Selected ($count)", "Scrie selecția ($count)")
     val selectAll get() = t("Tümünü Seç", "Select All", "Selectează tot")
@@ -245,9 +252,9 @@ object Strings {
     val appearanceSection get() = t("Görünüm", "Appearance", "Aspect")
     val suggestionsSection get() = t("Öneriler", "Suggestions", "Sugestii")
     val languageDesc get() = t(
-        "\"Sistem\" TV'nin dilini kullanır.",
-        "\"System\" uses the TV's language.",
-        "„Sistem” folosește limba televizorului."
+        "Seçilene kadar TV'nin dili kullanılır.",
+        "Uses the TV's language until you choose one.",
+        "Folosește limba televizorului până alegeți una."
     )
     val themeDesc get() = t(
         "\"Sistem\" TV'nin koyu/açık ayarını izler.",
@@ -288,13 +295,10 @@ object Strings {
     )
 
     // ─── About: developer, license, disclaimer (as in AynaCast) ───
-    val aboutCompany get() = "© Babadogan Tech & Edu"
-    val aboutDeveloperTitle get() = t("Geliştirici ve Telif", "Developer & Copyright", "Dezvoltator și drepturi de autor")
-    val aboutDeveloper get() = t(
-        "Babadogan Tech & Edu — Ankara Üniversitesi Teknokent\nbabadogan.net",
-        "Babadogan Tech & Edu — Ankara University Technopolis\nbabadogan.net",
-        "Babadogan Tech & Edu — Parcul Tehnologic al Universității din Ankara\nbabadogan.net"
-    )
+    val aboutDeveloperTitle get() = t("Geliştiren", "Developer", "Dezvoltator")
+    val aboutDeveloper get() = "berkbb"
+    val aboutWebsiteTitle get() = t("Web sitesi", "Website", "Site web")
+    val aboutWebsite get() = "https://berkbb.github.io"
     val aboutLicenseTitle get() = t("Lisans", "License", "Licență")
     val aboutLicense get() = t(
         "MIT Açık Kaynak Lisansı ile lisanslanmıştır.",

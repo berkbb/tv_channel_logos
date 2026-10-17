@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.3.0] - 2026-10-17
+
+### Changed
+- **New look, shared with Pitwall Updater and AynaCast:** darker background and cards, an accent
+  bar before the title and window titles, small grey captions, and buttons that fill light with
+  dark text when focused (the chosen option is filled blue). Buttons carry symbols (⚙️ ℹ️ 💾 ✓ ↺).
+- **Simpler main screen with a taller channel list:** the title sits at the top with Backup,
+  Settings and About on the right, and small badges under it show the channel, with-logo and
+  without-logo counts and the connection. The actions and list/selection choices are a narrow
+  panel beside the channel list; channel rows are slimmer, so more of them fit.
+- The sources line (logo counts per source, last update) moved to Settings → Sources.
+- **Backup** (back up, restore, export, import) moved from the side panel into its own window.
+- **Settings, About, Pick a logo and Import open full screen** with a close button in the corner
+  and Close at the bottom; questions and the quick menu stay small windows.
+- **Language setting:** only Türkçe, English and Română; until one is chosen the TV's language is
+  used and shown as chosen ("System" is gone).
+- **About:** developer (berkbb) and website cards as in Pitwall Updater; the company line is gone.
+
 ### Added
 - **Logos from the TV's storage**: images in the TV's own storage are matched by name like those
   on a USB stick ("USB" in the sources setting is now "Files"). App data (`Android`), lost files
