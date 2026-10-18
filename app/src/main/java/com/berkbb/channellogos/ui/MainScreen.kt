@@ -352,7 +352,8 @@ fun MainScreen(viewModel: MainViewModel) {
     // Progress and results cover the whole screen: a line at the bottom of the panel went unseen.
     if (state.busy && state.connection == MainViewModel.Connection.Connected) BusyScreen(state.status)
     else if (state.outcome != null) OutcomeScreen(state.outcome!!, onDismiss = viewModel::dismissOutcome)
-    else state.pendingWrite?.let { WriteConfirmScreen(it, viewModel, onWrite = viewModel::confirmWrite, onCancel = viewModel::cancelWrite) }
+    else if (state.pendingWrite != null) WriteConfirmScreen(state.pendingWrite!!, viewModel, onWrite = viewModel::confirmWrite, onCancel = viewModel::cancelWrite)
+    else if (state.pendingRestore != null) RestoreConfirmScreen(state.pendingRestore!!, viewModel, onRestore = viewModel::confirmRestore, onCancel = viewModel::cancelRestore)
     confirming?.let { (message, action) ->
         TvDialog(
             title = Strings.confirm,
@@ -550,7 +551,10 @@ private fun ActionPanel(
             TvButton(Strings.selectSafe, onClick = viewModel::selectSafe, enabled = idle, small = true, modifier = Modifier.weight(1f))
             TvButton(Strings.selectAll, onClick = viewModel::selectAll, enabled = idle, small = true, modifier = Modifier.weight(1f))
         }
-        TvButton(Strings.selectNone, onClick = viewModel::selectNone, enabled = idle && state.selected.isNotEmpty(), small = true, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TvButton(Strings.selectDrawnLogos, onClick = viewModel::selectDrawnLogos, enabled = idle, small = true, modifier = Modifier.weight(1f))
+            TvButton(Strings.selectNone, onClick = viewModel::selectNone, enabled = idle && state.selected.isNotEmpty(), small = true, modifier = Modifier.weight(1f))
+        }
 
         PanelSection(Strings.updateSection)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -603,10 +607,7 @@ private fun BackupWindow(
                 TvButton(Strings.backupLogos, icon = "💾", primary = true, enabled = idle && state.withLogo > 0,
                     onClick = { onConfirm(Strings.confirmBackup) { viewModel.backupLogos() } }, modifier = Modifier.weight(1f).focusRequester(first))
                 TvButton(Strings.restoreBackup, icon = "↺", enabled = idle && state.backupCount > 0,
-                    onClick = {
-                        val (matched, total) = viewModel.backupMatch()
-                        onConfirm(Strings.confirmRestoreMatched(matched, total, matched < total * MainViewModel.MATCH_SHARE)) { viewModel.restoreBackup() }
-                    }, modifier = Modifier.weight(1f))
+                    onClick = viewModel::prepareRestore, modifier = Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 TvButton(Strings.exportBackup, icon = "⇡", enabled = idle && state.backupCount > 0,
@@ -1025,6 +1026,93 @@ private fun WriteConfirmScreen(
                     TvButton(Strings.skipLowQuality(pending.total - pending.lowQuality), onClick = { onWrite(true) })
                 }
                 TvButton(Strings.no, onClick = onCancel)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RestoreConfirmScreen(
+    pending: MainViewModel.PendingRestore,
+    viewModel: MainViewModel,
+    onRestore: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onCancel,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        val restoreFocus = remember { FocusRequester() }
+        LaunchedEffect(pending) { runCatching { restoreFocus.requestFocus() } }
+        Column(
+            modifier = Modifier.fillMaxSize().background(Background).padding(horizontal = 120.dp, vertical = 48.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(Strings.restoreBackup, color = TextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(20.dp))
+            Column(modifier = Modifier.widthIn(max = 760.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(Strings.restorePreviewDesc(pending.matched, pending.total), color = TextPrimary, fontSize = 20.sp)
+                if (pending.channelsChanged) {
+                    Text(Strings.channelsChangedWarning, color = Orange, fontSize = 17.sp)
+                }
+            }
+            if (pending.previewItems.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 760.dp)
+                        .fillMaxWidth()
+                        .background(Surface, RoundedCornerShape(12.dp))
+                        .padding(16.dp)
+                ) {
+                    Caption(Strings.previewBeforeRestore.uppercase(Strings.locale))
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        for (item in pending.previewItems) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(Background, RoundedCornerShape(8.dp))
+                                    .padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    "${item.channelNumber} ${item.channelName}",
+                                    color = TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                LogoPreview(
+                                    candidate = item.candidate,
+                                    viewModel = viewModel,
+                                    modifier = Modifier.size(width = 54.dp, height = 40.dp)
+                                )
+                            }
+                        }
+                    }
+                    if (pending.matched > pending.previewItems.size) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            Strings.andMoreChannels(pending.matched - pending.previewItems.size),
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            modifier = Modifier.align(Alignment.End)
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(28.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                TvButton(Strings.restoreBackup, primary = true, onClick = onRestore, modifier = Modifier.focusRequester(restoreFocus))
+                TvButton(Strings.cancel, onClick = onCancel)
             }
         }
     }
@@ -1483,10 +1571,23 @@ private fun SettingsDialog(
                 TvButton(if (value) "✓ $label" else label, selected = value, small = true, onClick = { onChange(update(!value)) })
             }
         }
+        SettingRow(Strings.piconsStyleSetting, Strings.piconsStyleDesc) {
+            for ((code, label) in listOf(
+                Settings.PICONS_STYLE_DEFAULT to Strings.piconsStyleDefault,
+                Settings.PICONS_STYLE_LIGHT to Strings.piconsStyleLight,
+                Settings.PICONS_STYLE_DARK to Strings.piconsStyleDark
+            )) {
+                TvButton(label, selected = settings.piconsStyle == code, small = true, onClick = { onChange(settings.copy(piconsStyle = code)) })
+            }
+        }
 
         PanelSection(Strings.storageSection)
         SettingRow(Strings.cacheSizeTitle, Strings.cacheSizeDesc(formatBytes(cacheSize))) {
             TvButton(Strings.cacheClear, small = true, enabled = cacheSize > 0, onClick = onClearCache)
+        }
+        SettingRow(Strings.restartTvSetting, Strings.restartTvDesc) {
+            TvButton(Strings.on, selected = settings.restartLiveTv, small = true, onClick = { onChange(settings.copy(restartLiveTv = true)) })
+            TvButton(Strings.off, selected = !settings.restartLiveTv, small = true, onClick = { onChange(settings.copy(restartLiveTv = false)) })
         }
     }
 }
@@ -1633,7 +1734,14 @@ private fun LogoInfoDialog(
             val issues = viewModel.state.value.poorLogos[suggestion.id]
             val qualityText = if (!issues.isNullOrEmpty()) qualityLabel(issues) else Strings.logoQualityOk
             InfoRow(Strings.logoQualityStatus, qualityText)
+            channel.serviceKey?.let { dvbTripletText(it) }?.let { dvb ->
+                InfoRow(Strings.dvbParams, dvb)
+            }
         } else {
+            channel.serviceKey?.let { dvbTripletText(it) }?.let { dvb ->
+                InfoRow(Strings.dvbParams, dvb)
+                Spacer(Modifier.height(8.dp))
+            }
             Text(Strings.noSuggestion, color = TextSecondary, fontSize = 15.sp)
         }
     }
@@ -1667,6 +1775,15 @@ private fun LogoInfoDialog(
             }
         }
     }
+}
+
+private fun dvbTripletText(serviceKey: String): String? {
+    val parts = serviceKey.split('_')
+    if (parts.size != 3) return null
+    val sid = parts[0].toIntOrNull(16) ?: return null
+    val tsid = parts[1].toIntOrNull(16) ?: return null
+    val onid = parts[2].toIntOrNull(16) ?: return null
+    return "SID: $sid (0x${parts[0]}) · TSID: $tsid (0x${parts[1]}) · ONID: $onid (0x${parts[2]})"
 }
 
 @Composable

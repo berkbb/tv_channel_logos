@@ -486,4 +486,32 @@ object Strings {
     val filterRadioOnly get() = t("Yalnızca Radyo", "Radio Only", "Doar Radio")
 
     val zoomPreview get() = t("Logoyu Büyüt", "Enlarge Logo", "Mărește sigla")
+
+    val dvbParams get() = t("DVB Kimliği (SID/TSID/ONID)", "DVB Identifiers (SID/TSID/ONID)", "Identificatori DVB (SID/TSID/ONID)")
+
+    val piconsStyleSetting get() = t("Picons Logo Stili", "Picons Logo Style", "Stil logo Picons")
+    val piconsStyleDesc get() = t(
+        "Koyu renkli TV bilgi çubuğu için açık veya koyu logo varyantı.",
+        "Light or dark logo variant for the TV's dark channel bar.",
+        "Variantă deschisă sau întunecată pentru bara TV."
+    )
+    val piconsStyleDefault get() = t("Varsayılan", "Default", "Implicit")
+    val piconsStyleLight get() = t("Açık (Light)", "Light", "Luminoasă")
+    val piconsStyleDark get() = t("Koyu (Dark)", "Dark", "Întunecată")
+
+    val selectDrawnLogos get() = t("Logosuzlara Yazılı Ata", "Assign Drawn to Missing", "Atribuie desenate celor lipsă")
+
+    val restartTvSetting get() = t("Canlı TV Arayüzünü Yenile", "Refresh Live TV Screen", "Reîmprospătează ecranul TV")
+    val restartTvDesc get() = t(
+        "Yeni logoların hemen görünmesi için TV kanal arayüzü arka planda yeniden başlatılır.",
+        "Restarts the TV's channel screen in the background so new logos appear at once.",
+        "Repornește ecranul de canale în fundal pentru a afișa imediat siglele noi."
+    )
+
+    val previewBeforeRestore get() = t("Geri Yüklenecek Logolar", "Logos to be Restored", "Logo-uri de restaurat")
+    fun restorePreviewDesc(matched: Int, total: Int) = t(
+        "Yedekteki $total logodan $matched tanesi eşleşti ve geri yüklenecek.",
+        "$matched of $total backed-up logos matched and will be restored.",
+        "$matched din $total sigle salvate s-au potrivit și vor fi restaurate."
+    )
 }

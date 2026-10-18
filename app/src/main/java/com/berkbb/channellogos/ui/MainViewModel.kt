@@ -70,6 +70,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val previewItems: List<PendingItem> = emptyList()
     )
 
+    data class PendingRestore(
+        val matched: Int,
+        val total: Int,
+        val channelsChanged: Boolean,
+        val previewItems: List<PendingItem> = emptyList()
+    )
+
     enum class BackupPlace { USB, INTERNAL }
     enum class ChannelSort { NUMBER, NAME, MISSING_FIRST }
     enum class MediaFilter { ALL, TV_ONLY, RADIO_ONLY }
@@ -116,6 +123,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val busy: Boolean = false,
         val outcome: Outcome? = null,
         val pendingWrite: PendingWrite? = null,
+        val pendingRestore: PendingRestore? = null,
         /** Backups found for importing; null while that list is closed. */
         val foundBackups: List<FoundBackup>? = null,
         val choosingExport: Boolean = false,
@@ -198,8 +206,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Saves [settings]; source and suggestion choices take effect at once on the current list. */
     fun updateSettings(settings: Settings) {
+        val oldPiconsStyle = _state.value.settings.piconsStyle
         settingsStore.save(settings)
         Strings.setLanguage(settings.language)
+        if (oldPiconsStyle != settings.piconsStyle) {
+            previews.clear()
+        }
         _state.update { it.copy(settings = settings) }
         if (_state.value.channels.isNotEmpty()) {
             viewModelScope.launch { showChannels(Result.success(_state.value.channels)) }
@@ -414,6 +426,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectNone() = _state.update { it.copy(selected = emptySet()) }
+
+    /** Assigns a text/drawn logo to all channels without a logo that currently have no catalogue match. */
+    fun selectDrawnLogos() {
+        val state = _state.value
+        val newSuggestions = HashMap(state.suggestions)
+        val newSelected = HashSet(state.selected)
+        for (channel in state.channels) {
+            if (!channel.hasLogo && channel.id !in state.suggestions) {
+                val drawn = LogoMatching.textLogo(channel.name)
+                newSuggestions[channel.id] = drawn
+                newSelected += channel.id
+            }
+        }
+        _state.update { it.copy(suggestions = newSuggestions, selected = newSelected) }
+    }
 
     fun setShowAll(showAll: Boolean) = _state.update { it.copy(showAll = showAll) }
 
@@ -814,6 +841,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return LogoBackups.match(entries, _state.value.channels).size to entries.size
     }
 
+    /** Prepares backup restoration with a visual preview of the first matched channels. */
+    fun prepareRestore() {
+        val (matchedCount, totalCount) = backupMatch()
+        val changed = matchedCount < totalCount * MATCH_SHARE
+        val entries = backups.snapshotEntries()
+        val matched = LogoBackups.match(entries, _state.value.channels)
+        val preview = matched.entries.take(5).map { (channel, entry) ->
+            PendingItem(
+                channelId = channel.id,
+                channelNumber = channel.number,
+                channelName = channel.name,
+                candidate = fileCandidate(entry.file)
+            )
+        }
+        _state.update {
+            it.copy(
+                pendingRestore = PendingRestore(
+                    matched = matchedCount,
+                    total = totalCount,
+                    channelsChanged = changed,
+                    previewItems = preview
+                )
+            )
+        }
+    }
+
+    fun confirmRestore() {
+        _state.update { it.copy(pendingRestore = null) }
+        restoreBackup()
+    }
+
+    fun cancelRestore() {
+        _state.update { it.copy(pendingRestore = null) }
+    }
+
     /** Writes the backed-up logos back, matching channels by number and name; damaged files are skipped. */
     fun restoreBackup() {
         runTask(Strings.restoring) {
@@ -867,7 +929,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val dir = shell.logoDirectory().apply { listFiles()?.forEach { it.delete() } }
         val files = logos.mapValues { (id, png) -> File(dir, "$id.png").apply { writeBytes(png) } }
         return try {
-            shellLock.withLock { shell.writeLogos(files, onProgress) }
+            shellLock.withLock { shell.writeLogos(files, onProgress, _state.value.settings.restartLiveTv) }
         } finally {
             dir.listFiles()?.forEach { it.delete() }
         }
@@ -951,7 +1013,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return when (candidate.source) {
             LogoSource.TV -> builtIn.read(ref.toInt())
             LogoSource.GITHUB -> gitHub.read(ref)
-            LogoSource.PICONS -> picons.read(ref)
+            LogoSource.PICONS -> picons.read(ref, _state.value.settings.piconsStyle)
             LogoSource.IPTV -> iptv.read(ref)
             LogoSource.TEXT -> LogoImage.text(candidate.name)
             LogoSource.FILE -> fileLogos.read(ref)

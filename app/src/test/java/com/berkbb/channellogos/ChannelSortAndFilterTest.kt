@@ -47,4 +47,26 @@ class ChannelSortAndFilterTest {
         val stateMissing = MainViewModel.UiState(channels = all, showAll = true, sortMode = MainViewModel.ChannelSort.MISSING_FIRST)
         assertEquals(listOf("ATV", "TRT 1", "Show TV"), stateMissing.visibleChannels.map { it.name })
     }
+
+    @Test
+    fun settingsSerializesPiconsStyleAndRestartLiveTv() {
+        val settings = com.berkbb.channellogos.settings.Settings(
+            piconsStyle = com.berkbb.channellogos.settings.Settings.PICONS_STYLE_LIGHT,
+            restartLiveTv = false
+        )
+        val map = settings.toMap()
+        assertEquals("light", map["picons_style"])
+        assertEquals("false", map["restart_live_tv"])
+
+        val loaded = com.berkbb.channellogos.settings.Settings.fromMap(map)
+        assertEquals(com.berkbb.channellogos.settings.Settings.PICONS_STYLE_LIGHT, loaded.piconsStyle)
+        assertEquals(false, loaded.restartLiveTv)
+    }
+
+    @Test
+    fun dvbServiceKeyFormatting() {
+        // Türksat 42E ATV HD: onid=1, tsid=8, sid=701 (0x2BD)
+        val key = com.berkbb.channellogos.tv.serviceKey("1", "8", "701")
+        assertEquals("2BD_8_1", key)
+    }
 }

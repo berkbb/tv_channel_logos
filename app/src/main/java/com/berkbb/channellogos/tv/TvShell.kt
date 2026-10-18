@@ -104,7 +104,7 @@ class TvShell(private val context: Context) : AutoCloseable {
      * (on Android 8 the TV's adbd dropped the connection during every push).
      * Returns the ids that were written.
      */
-    fun writeLogos(logos: Map<Long, File>, onProgress: (done: Int) -> Unit): Set<Long> {
+    fun writeLogos(logos: Map<Long, File>, onProgress: (done: Int) -> Unit, restartTv: Boolean = true): Set<Long> {
         val written = HashSet<Long>()
         // Batches keep each command line short; a batch is redone whole after a reconnect.
         for (batch in logos.entries.chunked(BATCH_SIZE)) {
@@ -117,7 +117,7 @@ class TvShell(private val context: Context) : AutoCloseable {
             response.output.lineSequence().filter { it.startsWith("FAIL ") }.forEach { android.util.Log.w("ChannelLogos", it) }
             onProgress(written.size)
         }
-        if (written.isNotEmpty()) refreshTvUi()
+        if (written.isNotEmpty() && restartTv) refreshTvUi()
         return written
     }
 

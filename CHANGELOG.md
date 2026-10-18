@@ -24,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alongside the Missing/All view toggle.
 - **Zoom logo preview**: in the Logo Details (INFO) window, users can click the preview card or press "Enlarge Logo"
   to inspect a large, centered preview tile with checkerboard background and asset metadata.
+- **DVB broadcast identifiers in logo inspection**: the Logo Details (INFO) window now decodes and displays
+  the channel's DVB triplet (`SID`, `TSID`, `ONID`) in decimal and hex formats for easy frequency verification.
+- **Picons logo style variant**: added a Picons Style setting (Default, Light, Dark) to download and render
+  optimized light or dark logo variants tailored for the TV's dark channel bar (OSD).
+- **Batch assign drawn typography logos**: added a quick action in the selection panel to instantly assign clean,
+  generated typography logos to all channels currently lacking any catalog match.
+- **Live TV UI restart toggle**: added a setting to control whether the TV's live channel screen is automatically
+  restarted in the background after writing to refresh memory caches immediately without rebooting the TV.
+- **Restore backup visual preview**: restoring a backup now presents a full preview screen displaying cards for
+  the matched channels and their restored logos before committing them to the TV database.
 
 ---
 

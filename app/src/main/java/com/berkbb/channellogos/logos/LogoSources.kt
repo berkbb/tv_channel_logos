@@ -59,7 +59,7 @@ data class LogoEntry<T>(val value: T, val tier: Int) {
 /** Country the TV's channels belong to, in the forms both sources use. */
 class Country(val isoCode: String) {
     /** English name, as used by the TV's logo table ("Turkey") and by tv-logos ("turkey"). */
-    val englishName: String = Locale("", isoCode).getDisplayCountry(Locale.ENGLISH)
+    val englishName: String = java.util.Locale.Builder().setRegion(isoCode).build().getDisplayCountry(Locale.ENGLISH)
         .let { if (it == "Türkiye") "Turkey" else it }
     val gitHubFolder: String = englishName.lowercase(Locale.ROOT).replace(' ', '-')
     val gitHubSuffix: String = isoCode.lowercase(Locale.ROOT)
@@ -290,12 +290,20 @@ class PiconsSource(private val context: Context) {
     /** When the indexes were last downloaded (0 if never). */
     fun updatedAt(): Long = File(context.filesDir, "picons-srp.index").lastModified()
 
-    /** The logo [name] as PNG: the PNG file if there is one, else the SVG drawn into a bitmap. */
-    fun read(name: String): ByteArray {
-        val cached = File(File(context.cacheDir, "picons"), "$name.png")
+    /** The logo [name] as PNG: the requested [style] variant (light, dark, or default), falling back to default. */
+    fun read(name: String, style: String = "default"): ByteArray {
+        val variant = if (style in listOf("light", "dark")) style else "default"
+        val cached = File(File(context.cacheDir, "picons"), "$name.$variant.png")
         if (cached.exists()) return cached.readBytes()
-        val png = runCatching { httpGet("$RAW/build-source/logos/$name.default.png") }.getOrNull()
-            ?: LogoImage.fromSvg(httpGet("$RAW/build-source/logos/$name.default.svg"))
+        val png = if (variant != "default") {
+            runCatching { httpGet("$RAW/build-source/logos/$name.$variant.png") }.getOrNull()
+                ?: runCatching { LogoImage.fromSvg(httpGet("$RAW/build-source/logos/$name.$variant.svg")) }.getOrNull()
+                ?: runCatching { httpGet("$RAW/build-source/logos/$name.default.png") }.getOrNull()
+                ?: LogoImage.fromSvg(httpGet("$RAW/build-source/logos/$name.default.svg"))
+        } else {
+            runCatching { httpGet("$RAW/build-source/logos/$name.default.png") }.getOrNull()
+                ?: LogoImage.fromSvg(httpGet("$RAW/build-source/logos/$name.default.svg"))
+        }
         cached.parentFile?.mkdirs()
         cached.writeBytes(png)
         return png
