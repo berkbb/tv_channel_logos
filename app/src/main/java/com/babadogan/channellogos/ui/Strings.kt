@@ -305,6 +305,8 @@ object Strings {
         "Licensed under the GNU General Public License v3.0 (GPL-3.0).",
         "Licențiat sub GNU General Public License v3.0 (GPL-3.0)."
     )
+    val viewLicense get() = t("Lisansı Görüntüle", "View License", "Vezi licența")
+    val dialogLicenseTitle get() = t("GNU Genel Kamu Lisansı v3.0", "GNU General Public License v3.0", "Licența Publică Generală GNU v3.0")
     val aboutDisclaimerTitle get() = t("Yasal Uyarı ve Marka Bildirimi", "Legal Notice & Trademarks", "Notă legală și mărci comerciale")
     val aboutDisclaimer get() = t(
         "Philips, Koninklijke Philips N.V.'nin; Android TV, Google LLC'nin ticari markasıdır. Kanal adları ve logoları ilgili yayıncıların ticari markalarıdır. Bu bağımsız proje Philips, TP Vision, Google, yayıncılar, tv-logo, picons veya iptv-org ile ilişkili değildir ve onlar tarafından onaylanmamıştır. Logolar yalnızca cihaz sahibinin kişisel kullanımı için TV'nin kendi kanal listesine yazılır; uygulama hiçbir logoyu dağıtmaz.",

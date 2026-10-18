@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Full-screen read-only license viewer**: like in Pitwall Updater, the About window now features a "View License" button that opens a full-screen, D-pad scrollable viewer displaying the complete GNU General Public License v3.0 text (`assets/LICENSE`) in monospace formatting.
+
 ---
 
 ## [1.3.0] - 2026-10-17

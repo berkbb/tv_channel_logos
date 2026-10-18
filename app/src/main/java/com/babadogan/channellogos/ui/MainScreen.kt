@@ -68,6 +68,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1195,6 +1196,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
     val version = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     }
+    var showLicense by remember { mutableStateOf(false) }
     TvDialog(
         title = Strings.about,
         onDismiss = onDismiss,
@@ -1213,6 +1215,9 @@ private fun AboutDialog(onDismiss: () -> Unit) {
                     Text("${Strings.version(version)}  ·  ${Strings.aboutLicense}", color = TextSecondary, fontSize = 14.sp)
                 }
             }
+        },
+        footer = {
+            TvButton(Strings.viewLicense, onClick = { showLicense = true })
         }
     ) {
         Text(Strings.aboutWhat, color = TextPrimary, fontSize = 16.sp)
@@ -1232,6 +1237,42 @@ private fun AboutDialog(onDismiss: () -> Unit) {
             InfoCard(Strings.aboutWebsiteTitle, Strings.aboutWebsite, Modifier.weight(1f), valueColor = Color(0xFF64B5F6))
         }
         AboutSection(Strings.aboutDisclaimerTitle, Strings.aboutDisclaimer)
+    }
+
+    if (showLicense) {
+        LicenseDialog(onDismiss = { showLicense = false })
+    }
+}
+
+/** Full-screen read-only License window displaying the GNU General Public License v3.0, as in Pitwall Updater. */
+@Composable
+private fun LicenseDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val licenseText = remember(context) {
+        runCatching {
+            context.assets.open("LICENSE").bufferedReader().use { it.readText() }
+        }.getOrDefault("GNU General Public License v3.0\n\nhttps://www.gnu.org/licenses/gpl-3.0.txt")
+    }
+    TvDialog(
+        title = Strings.dialogLicenseTitle,
+        onDismiss = onDismiss,
+        fullScreen = true,
+        textBody = true
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Surface, RoundedCornerShape(12.dp))
+                .padding(20.dp)
+        ) {
+            Text(
+                text = licenseText,
+                color = TextPrimary,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                fontFamily = FontFamily.Monospace
+            )
+        }
     }
 }
 
