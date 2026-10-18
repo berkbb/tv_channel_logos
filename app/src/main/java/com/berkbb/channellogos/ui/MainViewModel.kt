@@ -192,6 +192,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 return@launch
             }
+            val probeResult = withContext(Dispatchers.IO) { shellLock.withLock { shell.probe() } }
+            if (probeResult.isFailure) {
+                val errorMsg = probeResult.exceptionOrNull()?.message ?: "TV logo provider unsupported"
+                Log.w(TAG, "TV logo probe failed: $errorMsg")
+                _state.update { it.copy(unsupportedReason = errorMsg) }
+                return@launch
+            }
             // One after the other: run together, the two compete for the TV's slow CPU and both slow down.
             loadSources()
             _state.update { it.copy(busy = true, status = Strings.loadingChannels) }
@@ -808,7 +815,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "SecurityException",
             "Permission Denial",
             "TV provider not available",
-            "getContentProviderExternal not found"
+            "getContentProviderExternal not found",
+            "does not support channel logo",
+            "TV provider channel query returned null"
         )
     }
 }

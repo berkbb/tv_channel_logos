@@ -52,6 +52,8 @@ public final class TvLogoTool {
         try {
             if (args[0].equals("list")) {
                 list(provider);
+            } else if (args[0].equals("probe")) {
+                probe(provider);
             } else if (args[0].equals("write")) {
                 for (int i = 1; i + 1 < args.length; i += 2) {
                     write(provider, args[i], args[i + 1]);
@@ -90,6 +92,32 @@ public final class TvLogoTool {
             return holder.getClass().getField("provider").get(holder);
         }
         throw new IllegalStateException("getContentProviderExternal not found");
+    }
+
+    private static void probe(Object provider) throws Exception {
+        Uri channelUri = Uri.parse("content://" + AUTHORITY + "/channel");
+        String[] projection = {"_id"};
+        Cursor cursor = (Cursor) invoke(provider, "query", channelUri, projection, "r");
+        if (cursor == null) {
+            System.out.println("FAIL TV provider channel query returned null");
+            return;
+        }
+        cursor.close();
+
+        Uri sampleLogoUri = Uri.parse("content://" + AUTHORITY + "/channel/1/logo");
+        try {
+            Object type = invoke(provider, "getType", sampleLogoUri, null, null);
+            if (type == null) {
+                System.out.println("FAIL TV provider does not support channel logo URI");
+                return;
+            }
+        } catch (Exception e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            System.out.println("FAIL " + clean(String.valueOf(cause)));
+            return;
+        }
+
+        System.out.println("OK");
     }
 
     private static void list(Object provider) throws Exception {

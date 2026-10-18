@@ -58,6 +58,20 @@ class TvShell(private val context: Context) : AutoCloseable {
         dadb = connection
     }
 
+    /**
+     * Checks whether the TV's TV Provider is reachable and supports channel logos.
+     * Returns failure if the TV or shell user lacks logo support.
+     */
+    fun probe(): Result<Unit> = runCatching {
+        val response = withConnection { it.shell(tool("probe")) }
+        check(response.exitCode == 0) { response.allOutput.ifBlank { "TvLogoTool probe failed (${response.exitCode})" } }
+        val output = response.output.trim()
+        if (output.startsWith("FAIL ")) {
+            error(output.removePrefix("FAIL ").trim())
+        }
+        check(output.startsWith("OK")) { "Unexpected probe output: $output" }
+    }
+
     /** The TV's broadcast (tuner) channels, with whether each has a logo. */
     fun listChannels(): List<Channel> {
         val response = withConnection { it.shell(tool("list")) }
