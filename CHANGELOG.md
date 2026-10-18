@@ -9,12 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- **Full-screen read-only license viewer**: like in Pitwall Updater, the About window now features a "View License" button that opens a full-screen, D-pad scrollable viewer displaying the complete GNU General Public License v3.0 text (`assets/LICENSE`) in monospace formatting.
-
 ---
 
-## [1.3.0] - 2026-10-17
+## [1.3.0] - 2026-10-18
 
 ### Changed
 - **New look, shared with Pitwall Updater and AynaCast:** darker background and cards, an accent
@@ -33,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **About:** developer (berkbb) and website cards as in Pitwall Updater; the company line is gone.
 
 ### Added
+- **Full-screen read-only license viewer**: like in Pitwall Updater, the About window now features a
+  "View License" button that opens a full-screen, D-pad scrollable viewer displaying the complete
+  GNU General Public License v3.0 text (`assets/LICENSE`) in monospace formatting.
 - **Logos from the TV's storage**: images in the TV's own storage are matched by name like those
   on a USB stick ("USB" in the sources setting is now "Files"). App data (`Android`), lost files
   and the logo backups are not searched; for the same name a stick's file wins.
