@@ -1,4 +1,4 @@
-# Channel Logos (Kanal Logoları)
+# Channel Logos
 
 An Android TV app that finds the channels without a logo in the TV's channel list, suggests a
 fitting logo and writes it into the TV's channel database. Built and tested on a Philips (TP Vision)
