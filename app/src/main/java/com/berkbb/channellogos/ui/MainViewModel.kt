@@ -587,7 +587,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val channels = _state.value.channels.filter { it.hasLogo }
         val logos = shellLock.withLock { shell.readLogos(channels.map { it.id }) }
         val byChannel = channels.mapNotNull { channel -> logos[channel.id]?.let { channel to it } }.toMap()
-        if (byChannel.isNotEmpty()) backups.saveSnapshot(byChannel)
+        if (byChannel.isNotEmpty()) {
+            backups.saveSnapshot(byChannel)
+            runCatching {
+                val targets = usbBackupTargets()
+                if (targets.isNotEmpty()) {
+                    val meta = backupMeta()
+                    for (target in targets) {
+                        backups.exportSnapshot(target, meta)
+                        Log.i(TAG, "Mirrored backup to USB: ${target.path}")
+                    }
+                }
+            }.onFailure { Log.w(TAG, "USB backup mirror", it) }
+        }
         return byChannel.size
     }
 

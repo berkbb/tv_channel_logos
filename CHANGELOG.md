@@ -49,6 +49,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   surfaces a badge in the header when a newer version is available.
 - **Write confirmation visual preview**: the confirmation screen renders preview cards showing sample channels
   and their new logos before writing to the TV database.
+- **Automatic USB mount & unmount detection**: registers a media broadcast receiver that automatically refreshes
+  external file logos when USB storage is connected or disconnected.
+- **Radio channel badges**: radio broadcast channels display a distinct 📻 radio indicator in channel list rows.
+- **Remote INFO key logo details**: pressing INFO or GUIDE on the remote (or via the row quick menu) displays
+  detailed logo matching information (source, reference, tier, match strength and quality).
+- **Automatic USB backup mirroring**: whenever an automatic or manual backup snapshot is taken, a duplicate is
+  mirrored to mounted USB storage (`ChannelLogosBackup`) for off-device safety.
 - **Logos from the TV's storage**: images in the TV's own storage are matched by name like those
   on a USB stick ("USB" in the sources setting is now "Files"). App data (`Android`), lost files
   and the logo backups are not searched; for the same name a stick's file wins.

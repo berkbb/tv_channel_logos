@@ -1,6 +1,10 @@
 package com.berkbb.channellogos
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -21,6 +25,12 @@ class MainActivity : ComponentActivity() {
         if (granted) viewModel.onStorageAccess()
     }
 
+    private val usbReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            viewModel.onStorageAccess()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { MainScreen(viewModel) }
@@ -32,5 +42,21 @@ class MainActivity : ComponentActivity() {
         if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
             storagePermission.launch(permission)
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_MEDIA_MOUNTED)
+            addAction(Intent.ACTION_MEDIA_UNMOUNTED)
+            addAction(Intent.ACTION_MEDIA_REMOVED)
+            addDataScheme("file")
+        }
+        registerReceiver(usbReceiver, filter)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        runCatching { unregisterReceiver(usbReceiver) }
     }
 }

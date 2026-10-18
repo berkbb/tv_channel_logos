@@ -131,6 +131,8 @@ fun MainScreen(viewModel: MainViewModel) {
     val onSearch: (TextFieldValue) -> Unit = { search = it; viewModel.setQuery(it.text) }
 
     var showBackups by remember { mutableStateOf(false) }
+    var focusedChannel by remember { mutableStateOf<Channel?>(null) }
+    var showLogoInfo by remember { mutableStateOf<Channel?>(null) }
     val connected = state.connection == MainViewModel.Connection.Connected
 
     val listState = rememberLazyListState()
@@ -148,6 +150,13 @@ fun MainScreen(viewModel: MainViewModel) {
             .onPreviewKeyEvent { event ->
                 if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.nativeKeyEvent.keyCode) {
+                    android.view.KeyEvent.KEYCODE_INFO,
+                    android.view.KeyEvent.KEYCODE_GUIDE -> {
+                        focusedChannel?.let {
+                            showLogoInfo = it
+                            return@onPreviewKeyEvent true
+                        }
+                    }
                     android.view.KeyEvent.KEYCODE_PROG_RED -> {
                         if (state.selected.isNotEmpty()) {
                             viewModel.selectNone()
@@ -267,6 +276,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 ChannelList(
                     state, viewModel,
                     listState = listState,
+                    onFocus = { focusedChannel = it },
                     onChange = { picking = it },
                     onLongPress = { quickMenu = it },
                     modifier = Modifier.weight(1f).fillMaxWidth()
@@ -304,11 +314,21 @@ fun MainScreen(viewModel: MainViewModel) {
             onWrite = { quickMenu = null; viewModel.applyOne(channel.id) },
             onToggle = { quickMenu = null; viewModel.toggle(channel.id) },
             onChange = { quickMenu = null; picking = channel },
+            onInfo = { showLogoInfo = channel; quickMenu = null },
             onReset = {
                 quickMenu = null
                 confirming = Strings.confirmReset(1) to { viewModel.resetToDefault(listOf(channel.id)) }
             },
             onDismiss = { quickMenu = null }
+        )
+    }
+    showLogoInfo?.let { channel ->
+        LogoInfoDialog(
+            channel = channel,
+            suggestion = state.suggestions[channel.id],
+            poor = state.suggestions[channel.id]?.id in state.poorLogos,
+            viewModel = viewModel,
+            onDismiss = { showLogoInfo = null }
         )
     }
     picking?.let { channel ->
@@ -650,6 +670,7 @@ private fun ChannelList(
     state: MainViewModel.UiState,
     viewModel: MainViewModel,
     listState: LazyListState,
+    onFocus: (Channel) -> Unit,
     onChange: (Channel) -> Unit,
     onLongPress: (Channel) -> Unit,
     modifier: Modifier
@@ -664,6 +685,7 @@ private fun ChannelList(
                 poor = suggestion != null && suggestion.id in state.poorLogos,
                 selected = channel.id in state.selected,
                 viewModel = viewModel,
+                onFocus = { onFocus(channel) },
                 onToggle = { viewModel.toggle(channel.id) },
                 onLongPress = { onLongPress(channel) },
                 onChange = { onChange(channel) }
@@ -680,12 +702,13 @@ private fun ChannelRow(
     poor: Boolean,
     selected: Boolean,
     viewModel: MainViewModel,
+    onFocus: () -> Unit,
     onToggle: () -> Unit,
     onLongPress: () -> Unit,
     onChange: () -> Unit
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        FocusBox(onClick = onToggle, onLongClick = onLongPress, modifier = Modifier.weight(1f)) { focused ->
+        FocusBox(onClick = onToggle, onLongClick = onLongPress, onFocused = onFocus, modifier = Modifier.weight(1f)) { focused ->
             Row(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 14.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -695,11 +718,18 @@ private fun ChannelRow(
                 Text(channel.number, color = TextSecondary, fontSize = 15.sp, modifier = Modifier.width(52.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     // The whole width is the name's; long names wrap to a second line instead of being cut.
-                    Text(
-                        channel.name, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Medium,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis
-                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (channel.isRadio) Text("📻 ", fontSize = 14.sp)
+                        Text(
+                            channel.name, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Medium,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (channel.isRadio) {
+                            Text(Strings.radioMark, color = Accent, fontSize = 12.sp)
+                            Text("  ·  ", color = TextSecondary, fontSize = 12.sp)
+                        }
                         Text(
                             if (channel.hasLogo) Strings.hasLogo else Strings.noLogo,
                             color = if (channel.hasLogo) Green else TextSecondary, fontSize = 12.sp
@@ -864,6 +894,7 @@ private fun QuickMenu(
     onWrite: () -> Unit,
     onToggle: () -> Unit,
     onChange: () -> Unit,
+    onInfo: () -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -878,6 +909,7 @@ private fun QuickMenu(
         } else {
             TvButton(Strings.change, onClick = onChange, modifier = wide.focusRequester(first))
         }
+        TvButton(Strings.logoInfoTitle, icon = "ℹ️", onClick = onInfo, modifier = wide)
         if (changed) TvButton(Strings.resetOne, onClick = onReset, modifier = wide)
     }
 }
@@ -1506,6 +1538,68 @@ private fun AboutDialog(viewModel: MainViewModel, onDismiss: () -> Unit) {
     }
 }
 
+@Composable
+private fun LogoInfoDialog(
+    channel: Channel,
+    suggestion: LogoCandidate?,
+    poor: Boolean,
+    viewModel: MainViewModel,
+    onDismiss: () -> Unit
+) {
+    TvDialog(
+        title = "${channel.number} ${channel.name}",
+        onDismiss = onDismiss,
+        maxWidth = 580.dp,
+        footer = {
+            TvButton(Strings.ok, primary = true, onClick = onDismiss)
+        }
+    ) {
+        if (suggestion != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().background(SurfaceVariant, RoundedCornerShape(12.dp)).padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LogoPreview(suggestion, viewModel, modifier = Modifier.size(width = 80.dp, height = 58.dp))
+                Spacer(Modifier.width(16.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(sourceLabel(suggestion), color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${Strings.logoStrength}: ${strengthLabel(suggestion.strength)}",
+                        color = if (LogoMatching.isSafe(suggestion) && !poor) Green else Orange,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            InfoRow(Strings.logoSource, sourceLabel(suggestion))
+            InfoRow(Strings.logoReference, suggestion.id)
+            val tierName = when (suggestion.tier) {
+                com.berkbb.channellogos.logos.LogoEntry.COUNTRY -> Strings.tierCountry
+                com.berkbb.channellogos.logos.LogoEntry.INTERNATIONAL -> Strings.tierInternational
+                else -> Strings.tierOther
+            }
+            InfoRow(Strings.logoTier, tierName)
+            val issues = viewModel.state.value.poorLogos[suggestion.id]
+            val qualityText = if (!issues.isNullOrEmpty()) qualityLabel(issues) else Strings.logoQualityOk
+            InfoRow(Strings.logoQualityStatus, qualityText)
+        } else {
+            Text(Strings.noSuggestion, color = TextSecondary, fontSize = 15.sp)
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = TextSecondary, fontSize = 14.sp)
+        Text(value, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
 /** Full-screen read-only License window displaying the GNU General Public License v3.0, as in Pitwall Updater. */
 @Composable
 private fun LicenseDialog(onDismiss: () -> Unit) {
@@ -1612,10 +1706,16 @@ private fun FocusBox(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
+    onFocused: (() -> Unit)? = null,
     content: @Composable (focused: Boolean) -> Unit
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
+    if (onFocused != null) {
+        LaunchedEffect(focused) {
+            if (focused) onFocused()
+        }
+    }
     // A held OK key repeats KeyDown; the first repeat opens the long-press action and the key's
     // release is swallowed so the plain click does not follow.
     var longPressed by remember { mutableStateOf(false) }

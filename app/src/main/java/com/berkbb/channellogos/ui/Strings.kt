@@ -448,4 +448,16 @@ object Strings {
 
     val previewBeforeWrite get() = t("Değiştirilecek Logolar", "Logos to be Written", "Logo-uri de scris")
     fun andMoreChannels(count: Int) = t("+ $count kanal daha", "+ $count more channels", "+ încă $count canale")
+
+    val radioMark get() = t("Radyo", "Radio", "Post radio")
+    val logoInfoTitle get() = t("Logo Bilgisi", "Logo Details", "Detalii logo")
+    val logoSource get() = t("Kaynak", "Source", "Sursă")
+    val logoReference get() = t("Dosya / Referans", "File / Reference", "Fișier / Referință")
+    val logoTier get() = t("Eşleşme Seviyesi", "Match Tier", "Nivel potrivire")
+    val logoStrength get() = t("Eşleşme Gücü", "Match Strength", "Putere potrivire")
+    val logoQualityStatus get() = t("Görsel Kalitesi", "Visual Quality", "Calitate vizuală")
+    val logoQualityOk get() = t("Sorunsuz (TV için uygun)", "Good (Fits TV well)", "Bun (Potrivit pentru TV)")
+    val tierCountry get() = t("Ülke Kataloğu", "Country Catalogue", "Catalog național")
+    val tierInternational get() = t("Uluslararası Katalog", "International Catalogue", "Catalog internațional")
+    val tierOther get() = t("Diğer Ülkeler", "Other Countries", "Alte țări")
 }
