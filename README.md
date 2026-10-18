@@ -66,7 +66,7 @@ private channel databases are not handled yet.
 
 ## License
 
-Copyright (C) 2026 Babadogan Tech & Edu.
+Copyright (C) 2026 berkbb.
 
 This program is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License v3.0** (or, at your option, any later version) — see [LICENSE](LICENSE). It is distributed WITHOUT ANY WARRANTY.
 

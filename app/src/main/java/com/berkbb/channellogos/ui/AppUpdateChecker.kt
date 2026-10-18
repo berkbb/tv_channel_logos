@@ -4,7 +4,7 @@ import com.berkbb.channellogos.logos.httpGet
 import org.json.JSONObject
 
 object AppUpdateChecker {
-    private const val RELEASE_API_URL = "https://api.github.com/repos/berkbabadogan/tv_channel_logos/releases/latest"
+    private const val RELEASE_API_URL = "https://api.github.com/repos/berkbb/tv_channel_logos/releases/latest"
 
     data class CheckResult(
         val latestVersion: String,
