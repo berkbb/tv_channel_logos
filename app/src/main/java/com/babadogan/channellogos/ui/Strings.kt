@@ -301,9 +301,9 @@ object Strings {
     val aboutWebsite get() = "https://berkbb.github.io"
     val aboutLicenseTitle get() = t("Lisans", "License", "Licență")
     val aboutLicense get() = t(
-        "MIT Açık Kaynak Lisansı ile lisanslanmıştır.",
-        "Licensed under the MIT Open Source License.",
-        "Licențiat sub licența open source MIT."
+        "GNU Genel Kamu Lisansı v3.0 (GPL-3.0) ile lisanslanmıştır.",
+        "Licensed under the GNU General Public License v3.0 (GPL-3.0).",
+        "Licențiat sub GNU General Public License v3.0 (GPL-3.0)."
     )
     val aboutDisclaimerTitle get() = t("Yasal Uyarı ve Marka Bildirimi", "Legal Notice & Trademarks", "Notă legală și mărci comerciale")
     val aboutDisclaimer get() = t(

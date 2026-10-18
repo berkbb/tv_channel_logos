@@ -66,5 +66,9 @@ private channel databases are not handled yet.
 
 ## License
 
-MIT. Channel names and logos are trademarks of their owners; this independent project is not
+Copyright (C) 2026 Babadogan Tech & Edu.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License v3.0** (or, at your option, any later version) — see [LICENSE](LICENSE). It is distributed WITHOUT ANY WARRANTY.
+
+Channel names and logos are trademarks of their owners; this independent project is not
 affiliated with Philips, TP Vision, Google, the broadcasters, tv-logo, picons or iptv-org.
