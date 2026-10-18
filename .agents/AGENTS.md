@@ -6,7 +6,7 @@ relevant section there instead of re-deriving it from the code.
 
 ## The project
 
-An Android TV app (`com.babadogan.channellogos`, minSdk 26, Kotlin + Jetpack Compose, one module)
+An Android TV app (`com.berkbb.channellogos`, minSdk 26, Kotlin + Jetpack Compose, one module)
 that finds broadcast channels without a logo, suggests one and writes it into the TV's channel
 database. Reference device: Philips (TP Vision) TPM171E, Android 8.0, 1080p.
 

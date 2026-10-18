@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.babadogan.channellogos"
+    namespace = "com.berkbb.channellogos"
     compileSdk {
         version = release(37) {
             minorApiLevel = 2
@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.babadogan.channellogos"
+        applicationId = "com.berkbb.channellogos"
         minSdk = 26
         targetSdk = 35
         versionCode = 4

@@ -10,7 +10,7 @@
 ## 2. Code map
 
 ```
-app/src/main/java/com/babadogan/channellogos/
+app/src/main/java/com/berkbb/channellogos/
 ├── MainActivity.kt              # Compose host; asks for the storage permission (logo files)
 ├── tool/TvLogoTool.java         # Runs ON the TV as the shell user (app_process); list / write
 ├── tv/TvShell.kt                # dadb connection to localhost:5555, runs TvLogoTool, retries, refreshes the TV UI
@@ -34,7 +34,7 @@ The TV provider lets only the system and the shell (which holds `ACCESS_ALL_EPG_
 inputs' channels. The app:
 
 1. connects to the TV's adbd with its own RSA key (`files/adb/adbkey`, the TV asks once);
-2. runs `app_process -Djava.class.path=<own APK> /system/bin com.babadogan.channellogos.tool.TvLogoTool …`;
+2. runs `app_process -Djava.class.path=<own APK> /system/bin com.berkbb.channellogos.tool.TvLogoTool …`;
 3. `TvLogoTool` reaches the TV provider like the `content` command does (`IActivityManager.getContentProviderExternal`
    and the hidden `IContentProvider`), with arguments matched by type so Android 8 to 12 all work.
 
@@ -48,7 +48,7 @@ Commands and output:
 | `remove ID [ID …]` | `OK id` or `FAIL id reason`; the channel is left without a logo |
 
 PNG paths must be readable by the shell: the app puts them in its external files directory
-(`/storage/emulated/0/Android/data/com.babadogan.channellogos/files/logos`). `adb push` is not used;
+(`/storage/emulated/0/Android/data/com.berkbb.channellogos/files/logos`). `adb push` is not used;
 on Android 8 adbd dropped the connection during sync transfers.
 
 After a write the Philips live TV app is restarted (`am force-stop org.droidtv.playtv`): it caches
@@ -58,8 +58,8 @@ logos by URI (`ZapbarUtils: getBitmapFromUri() in cache`) and ignores the provid
 Try the helper by hand:
 
 ```bash
-APK=$(adb shell pm path com.babadogan.channellogos | sed 's/package://')
-adb shell app_process -Djava.class.path=$APK /system/bin com.babadogan.channellogos.tool.TvLogoTool list | head
+APK=$(adb shell pm path com.berkbb.channellogos | sed 's/package://')
+adb shell app_process -Djava.class.path=$APK /system/bin com.berkbb.channellogos.tool.TvLogoTool list | head
 ```
 
 ## 4. Logo sources and caches

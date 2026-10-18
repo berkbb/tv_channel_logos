@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **Channel Logos** (`com.babadogan.channellogos`) are documented in this file.
+All notable changes to **Channel Logos** (`com.berkbb.channellogos`) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -28,11 +28,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Language setting:** only Türkçe, English and Română; until one is chosen the TV's language is
   used and shown as chosen ("System" is gone).
 - **About:** developer (berkbb) and website cards as in Pitwall Updater; the company line is gone.
+- **Package identifier**: renamed from `com.babadogan.channellogos` to `com.berkbb.channellogos`.
 
 ### Added
 - **Full-screen read-only license viewer**: like in Pitwall Updater, the About window now features a
   "View License" button that opens a full-screen, D-pad scrollable viewer displaying the complete
   GNU General Public License v3.0 text (`assets/LICENSE`) in monospace formatting.
+- **Unsupported TV lock screen**: when run on TVs or devices that do not support TV broadcast logos or
+  block ADB shell access to the channel database, the app displays a full-screen notification and locks
+  itself, preventing broken operations and offering a single Exit action.
 - **Logos from the TV's storage**: images in the TV's own storage are matched by name like those
   on a USB stick ("USB" in the sources setting is now "Files"). App data (`Android`), lost files
   and the logo backups are not searched; for the same name a stick's file wins.
@@ -94,7 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   count as safe, and are left out by "Select Safe Ones".
 - **Automatic backup**: the first write on a TV without a backup backs up all its logos first.
 - **Backup on USB**: "Export Backup to USB" copies the backup to the stick
-  (`Android/data/com.babadogan.channellogos/files/ChannelLogosBackup`); "Import Backup from USB"
+  (`Android/data/com.berkbb.channellogos/files/ChannelLogosBackup`); "Import Backup from USB"
   reads it there or from a `ChannelLogosBackup` folder at the top of a stick, on this or another TV.
 - **Romanian channels on a non-Romanian TV**: when at least three channels match names that only
   Romania's catalogue knows, Romania's GitHub folder, iptv-org channels and picons satellites
