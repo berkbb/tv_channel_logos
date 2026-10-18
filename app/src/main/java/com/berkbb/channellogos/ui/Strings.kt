@@ -460,4 +460,30 @@ object Strings {
     val tierCountry get() = t("Ülke Kataloğu", "Country Catalogue", "Catalog național")
     val tierInternational get() = t("Uluslararası Katalog", "International Catalogue", "Catalog internațional")
     val tierOther get() = t("Diğer Ülkeler", "Other Countries", "Alte țări")
+
+    val storageSection get() = t("Depolama ve Önbellek", "Storage and Cache", "Stocare și cache")
+    val cacheSizeTitle get() = t("Önbellek Boyutu", "Cache Size", "Dimensiune cache")
+    fun cacheSizeDesc(size: String) = t("İndirilen logo önbelleği: $size", "Downloaded logo cache: $size", "Cache de sigle descărcate: $size")
+    val cacheClear get() = t("Önbelleği Boşalt", "Clear Cache", "Golește memoria cache")
+    val cacheCleared get() = t("Logo önbelleği boşaltıldı.", "Logo cache cleared.", "Memoria cache a siglelor a fost golită.")
+
+    val exportChannelsCsv get() = t("Kanal Listesini Dışa Aktar (CSV)", "Export Channel List (CSV)", "Exportă lista de canale (CSV)")
+    val exportingChannels get() = t("Kanal listesi dışa aktarılıyor…", "Exporting channel list…", "Se exportă lista de canale…")
+    fun exportedChannels(count: Int, path: String) = t(
+        "$count kanalın listesi dışa aktarıldı:\n$path",
+        "Exported list of $count channels to:\n$path",
+        "S-a exportat lista cu $count canale la:\n$path"
+    )
+
+    val sortSection get() = t("Kanal Sıralama", "Channel Sorting", "Sortare canale")
+    val sortNumber get() = t("Numara", "Number", "Număr")
+    val sortName get() = t("İsim (A-Z)", "Name (A-Z)", "Nume (A-Z)")
+    val sortMissingFirst get() = t("Eksikler Önde", "Missing First", "Lipsă în față")
+
+    val filterSection get() = t("Medya Filtresi", "Media Filter", "Filtrare media")
+    val filterAllMedia get() = t("Tüm Medya", "All Media", "Toate mediile")
+    val filterTvOnly get() = t("Yalnızca TV", "TV Only", "Doar TV")
+    val filterRadioOnly get() = t("Yalnızca Radyo", "Radio Only", "Doar Radio")
+
+    val zoomPreview get() = t("Logoyu Büyüt", "Enlarge Logo", "Mărește sigla")
 }

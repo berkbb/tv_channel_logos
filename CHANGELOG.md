@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] - 2026-10-18
+
+### Added
+- **Storage and cache management**: Settings displays the exact disk space used by downloaded logo caches (picons,
+  GitHub, iptv-org) and offers a one-click "Clear Cache" action to free up limited TV storage.
+- **Export channel list as CSV**: added "Export Channel List (CSV)" to the Backup window to output a complete channel
+  report (channel number, name, type, existing logo status, suggested logo, source and match strength) to USB or internal storage.
+- **Channel list sorting modes**: added quick sorting controls on the action panel to reorder channels by Number
+  (broadcast order), Alphabetically (A-Z), or Missing First (unbadged channels placed at top).
+- **Media type filtering**: added dedicated media filter buttons (All Media, TV Only, Radio Only) to work seamlessly
+  alongside the Missing/All view toggle.
+- **Zoom logo preview**: in the Logo Details (INFO) window, users can click the preview card or press "Enlarge Logo"
+  to inspect a large, centered preview tile with checkerboard background and asset metadata.
+
+---
+
 ## [1.3.0] - 2026-10-18
 
 ### Changed

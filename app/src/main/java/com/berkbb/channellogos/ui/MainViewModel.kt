@@ -71,6 +71,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     enum class BackupPlace { USB, INTERNAL }
+    enum class ChannelSort { NUMBER, NAME, MISSING_FIRST }
+    enum class MediaFilter { ALL, TV_ONLY, RADIO_ONLY }
 
     /** A backup found for importing, checked against its checksums and the TV's channels. */
     data class FoundBackup(
@@ -138,13 +140,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val backupTime: Long = 0L,
         val backupCount: Int = 0,
         val gitHubFailed: Boolean = false,
-        val updateStatus: UpdateStatus = UpdateStatus.Idle
+        val updateStatus: UpdateStatus = UpdateStatus.Idle,
+        val sortMode: ChannelSort = ChannelSort.NUMBER,
+        val mediaFilter: MediaFilter = MediaFilter.ALL,
+        val cacheSizeBytes: Long = 0L
     ) {
         val withLogo: Int get() = channels.count { it.hasLogo }
         val radios: Int get() = channels.count { it.isRadio }
-        /** By default the TV channels still missing a logo; radio stations only under "All". */
-        val visibleChannels: List<Channel> get() =
-            ChannelSearch.filter(if (showAll) channels else channels.filter { !it.hasLogo && !it.isRadio }, query)
+        /** Channels filtered by media type (TV/Radio), logo status (All/Missing), search query, and sorting. */
+        val visibleChannels: List<Channel> get() {
+            var list = when (mediaFilter) {
+                MediaFilter.ALL -> channels
+                MediaFilter.TV_ONLY -> channels.filter { !it.isRadio }
+                MediaFilter.RADIO_ONLY -> channels.filter { it.isRadio }
+            }
+            if (!showAll) {
+                list = list.filter { !it.hasLogo }
+            }
+            list = ChannelSearch.filter(list, query)
+            return when (sortMode) {
+                ChannelSort.NUMBER -> list
+                ChannelSort.NAME -> list.sortedWith(compareBy(java.text.Collator.getInstance(Strings.locale)) { it.name })
+                ChannelSort.MISSING_FIRST -> list.sortedWith(compareBy<Channel> { it.hasLogo }.thenBy { runCatching { it.number.toInt() }.getOrDefault(Int.MAX_VALUE) })
+            }
+        }
         /** Search matches the "without logo" view hides (channels with a logo, radios). */
         val hiddenMatches: Int get() =
             if (showAll || query.isBlank()) 0 else ChannelSearch.filter(channels, query).size - visibleChannels.size
@@ -173,6 +192,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         Strings.setLanguage(_state.value.settings.language)
+        refreshCacheSize()
         start()
     }
 
@@ -396,6 +416,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectNone() = _state.update { it.copy(selected = emptySet()) }
 
     fun setShowAll(showAll: Boolean) = _state.update { it.copy(showAll = showAll) }
+
+    fun setMediaFilter(filter: MediaFilter) = _state.update { it.copy(mediaFilter = filter) }
+
+    fun setSortMode(mode: ChannelSort) = _state.update { it.copy(sortMode = mode) }
 
     fun setQuery(query: String) = _state.update { it.copy(query = query) }
 
@@ -646,6 +670,73 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun chooseExport(open: Boolean) = _state.update { it.copy(choosingExport = open) }
+
+    fun refreshCacheSize() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val size = runCatching {
+                val cache = getApplication<Application>().cacheDir
+                cache.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
+            }.getOrDefault(0L)
+            _state.update { it.copy(cacheSizeBytes = size) }
+        }
+    }
+
+    fun clearCache() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val cache = getApplication<Application>().cacheDir
+                cache.listFiles()?.forEach { it.deleteRecursively() }
+            }
+            val size = runCatching {
+                val cache = getApplication<Application>().cacheDir
+                cache.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
+            }.getOrDefault(0L)
+            withContext(Dispatchers.Main) {
+                _state.update { it.copy(cacheSizeBytes = size, outcome = Outcome(true, Strings.cacheSizeTitle, Strings.cacheCleared)) }
+            }
+        }
+    }
+
+    fun exportChannelsCsv() {
+        if (_state.value.busy) return
+        runTask(Strings.exportingChannels) {
+            val channels = _state.value.channels
+            val suggestions = _state.value.suggestions
+            if (channels.isEmpty()) return@runTask failure(Strings.noChannelsTitle)
+
+            val csv = buildString {
+                append("Number,Name,Type,HasLogo,SuggestedLogo,SuggestedSource,Strength\n")
+                for (ch in channels) {
+                    val sug = suggestions[ch.id]
+                    val type = if (ch.isRadio) "Radio" else "TV"
+                    val hasLogo = if (ch.hasLogo) "Yes" else "No"
+                    val sugName = sug?.name?.replace("\"", "\"\"") ?: ""
+                    val sugSrc = sug?.source?.name ?: ""
+                    val sugStr = sug?.strength?.name ?: ""
+                    append("\"${ch.number}\",\"${ch.name.replace("\"", "\"\"")}\",\"$type\",\"$hasLogo\",\"$sugName\",\"$sugSrc\",\"$sugStr\"\n")
+                }
+            }
+
+            val usbTarget = usbBackupTargets().firstOrNull()
+            val targetFile = if (usbTarget != null) {
+                File(usbTarget, "channels.csv")
+            } else {
+                val dir = File(getApplication<Application>().filesDir, "export")
+                dir.mkdirs()
+                File(dir, "channels.csv")
+            }
+
+            targetFile.parentFile?.mkdirs()
+            targetFile.writeBytes(csv.toByteArray(Charsets.UTF_8))
+
+            if (usbTarget == null) {
+                shellLock.withLock {
+                    runCatching { shell.copyFolder(targetFile.parentFile!!.path, INTERNAL_BACKUP) }
+                }
+            }
+            done(Strings.exportedChannels(channels.size, targetFile.path))
+        }
+    }
 
     /** Settings and creation time stored with an exported backup. */
     private fun backupMeta(): Map<String, String> {

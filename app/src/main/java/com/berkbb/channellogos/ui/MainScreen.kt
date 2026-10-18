@@ -335,10 +335,18 @@ fun MainScreen(viewModel: MainViewModel) {
         LogoPicker(channel, viewModel, changed = channel.id in state.changed, onDismiss = { picking = null })
     }
     if (showSettings) {
+        LaunchedEffect(Unit) { viewModel.refreshCacheSize() }
         val sourcesInfo = Strings.sourceStats(state.tvLogos, state.gitHubLogos, state.piconsLogos, state.iptvLogos) +
             (if (state.fileLogos > 0) "  ·  " + Strings.fileStats(state.fileLogos) else "") +
             (if (state.sourcesUpdatedAt > 0L) "\n" + Strings.sourcesUpdatedAt(Strings.dateTime(state.sourcesUpdatedAt)) else "")
-        SettingsDialog(state.settings, sourcesInfo, onChange = viewModel::updateSettings, onDismiss = { showSettings = false })
+        SettingsDialog(
+            settings = state.settings,
+            sourcesInfo = sourcesInfo,
+            cacheSize = state.cacheSizeBytes,
+            onClearCache = viewModel::clearCache,
+            onChange = viewModel::updateSettings,
+            onDismiss = { showSettings = false }
+        )
     }
     if (showAbout) AboutDialog(viewModel, onDismiss = { showAbout = false })
     // Progress and results cover the whole screen: a line at the bottom of the panel went unseen.
@@ -524,6 +532,18 @@ private fun ActionPanel(
             TvButton(Strings.showMissing, selected = !state.showAll, small = true, onClick = { viewModel.setShowAll(false) }, modifier = Modifier.weight(1f))
             TvButton(Strings.showAll, selected = state.showAll, small = true, onClick = { viewModel.setShowAll(true) }, modifier = Modifier.weight(1f))
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TvButton(Strings.filterAllMedia, selected = state.mediaFilter == MainViewModel.MediaFilter.ALL, small = true, onClick = { viewModel.setMediaFilter(MainViewModel.MediaFilter.ALL) }, modifier = Modifier.weight(1f))
+            TvButton(Strings.filterTvOnly, selected = state.mediaFilter == MainViewModel.MediaFilter.TV_ONLY, small = true, onClick = { viewModel.setMediaFilter(MainViewModel.MediaFilter.TV_ONLY) }, modifier = Modifier.weight(1f))
+            TvButton(Strings.filterRadioOnly, selected = state.mediaFilter == MainViewModel.MediaFilter.RADIO_ONLY, small = true, onClick = { viewModel.setMediaFilter(MainViewModel.MediaFilter.RADIO_ONLY) }, modifier = Modifier.weight(1f))
+        }
+
+        PanelSection(Strings.sortSection)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TvButton(Strings.sortNumber, selected = state.sortMode == MainViewModel.ChannelSort.NUMBER, small = true, onClick = { viewModel.setSortMode(MainViewModel.ChannelSort.NUMBER) }, modifier = Modifier.weight(1f))
+            TvButton(Strings.sortName, selected = state.sortMode == MainViewModel.ChannelSort.NAME, small = true, onClick = { viewModel.setSortMode(MainViewModel.ChannelSort.NAME) }, modifier = Modifier.weight(1f))
+            TvButton(Strings.sortMissingFirst, selected = state.sortMode == MainViewModel.ChannelSort.MISSING_FIRST, small = true, onClick = { viewModel.setSortMode(MainViewModel.ChannelSort.MISSING_FIRST) }, modifier = Modifier.weight(1f))
+        }
 
         PanelSection(Strings.selectionSection)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -593,6 +613,10 @@ private fun BackupWindow(
                     onClick = { viewModel.chooseExport(true) }, modifier = Modifier.weight(1f))
                 TvButton(Strings.importBackup, icon = "⇣", enabled = idle,
                     onClick = viewModel::findBackups, modifier = Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TvButton(Strings.exportChannelsCsv, icon = "📋", enabled = idle && state.channels.isNotEmpty(),
+                    onClick = viewModel::exportChannelsCsv, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -1408,7 +1432,14 @@ private fun FolderRow(icon: String, name: String, modifier: Modifier = Modifier,
 }
 
 @Composable
-private fun SettingsDialog(settings: Settings, sourcesInfo: String, onChange: (Settings) -> Unit, onDismiss: () -> Unit) {
+private fun SettingsDialog(
+    settings: Settings,
+    sourcesInfo: String,
+    cacheSize: Long,
+    onClearCache: () -> Unit,
+    onChange: (Settings) -> Unit,
+    onDismiss: () -> Unit
+) {
     TvDialog(
         title = Strings.settings,
         onDismiss = onDismiss,
@@ -1452,7 +1483,20 @@ private fun SettingsDialog(settings: Settings, sourcesInfo: String, onChange: (S
                 TvButton(if (value) "✓ $label" else label, selected = value, small = true, onClick = { onChange(update(!value)) })
             }
         }
+
+        PanelSection(Strings.storageSection)
+        SettingRow(Strings.cacheSizeTitle, Strings.cacheSizeDesc(formatBytes(cacheSize))) {
+            TvButton(Strings.cacheClear, small = true, enabled = cacheSize > 0, onClick = onClearCache)
+        }
     }
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0) return "0 KB"
+    val kb = bytes / 1024.0
+    val mb = kb / 1024.0
+    return if (mb >= 1.0) String.format(java.util.Locale.US, "%.1f MB", mb)
+    else String.format(java.util.Locale.US, "%.0f KB", kb)
 }
 
 /** One setting: its name and explanation on the left, its choices on the right. */
@@ -1546,28 +1590,35 @@ private fun LogoInfoDialog(
     viewModel: MainViewModel,
     onDismiss: () -> Unit
 ) {
+    var showZoom by remember { mutableStateOf(false) }
+
     TvDialog(
         title = "${channel.number} ${channel.name}",
         onDismiss = onDismiss,
         maxWidth = 580.dp,
         footer = {
+            if (suggestion != null) {
+                TvButton(Strings.zoomPreview, icon = "🔍", onClick = { showZoom = true })
+            }
             TvButton(Strings.ok, primary = true, onClick = onDismiss)
         }
     ) {
         if (suggestion != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth().background(SurfaceVariant, RoundedCornerShape(12.dp)).padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                LogoPreview(suggestion, viewModel, modifier = Modifier.size(width = 80.dp, height = 58.dp))
-                Spacer(Modifier.width(16.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(sourceLabel(suggestion), color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text(
-                        "${Strings.logoStrength}: ${strengthLabel(suggestion.strength)}",
-                        color = if (LogoMatching.isSafe(suggestion) && !poor) Green else Orange,
-                        fontSize = 13.sp
-                    )
+            FocusBox(onClick = { showZoom = true }) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(SurfaceVariant, RoundedCornerShape(12.dp)).padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LogoPreview(suggestion, viewModel, modifier = Modifier.size(width = 80.dp, height = 58.dp))
+                    Spacer(Modifier.width(16.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(sourceLabel(suggestion), color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            "${Strings.logoStrength}: ${strengthLabel(suggestion.strength)}",
+                            color = if (LogoMatching.isSafe(suggestion) && !poor) Green else Orange,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -1584,6 +1635,36 @@ private fun LogoInfoDialog(
             InfoRow(Strings.logoQualityStatus, qualityText)
         } else {
             Text(Strings.noSuggestion, color = TextSecondary, fontSize = 15.sp)
+        }
+    }
+
+    if (showZoom && suggestion != null) {
+        TvDialog(
+            title = "${channel.number} ${channel.name}",
+            onDismiss = { showZoom = false },
+            maxWidth = 460.dp,
+            footer = {
+                TvButton(Strings.cancel, primary = true, onClick = { showZoom = false })
+            }
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                LogoPreview(
+                    candidate = suggestion,
+                    viewModel = viewModel,
+                    modifier = Modifier.size(width = 280.dp, height = 210.dp)
+                )
+                Text(
+                    text = "${sourceLabel(suggestion)} · ${suggestion.name.substringAfterLast('/')}",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
