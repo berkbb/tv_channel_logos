@@ -50,9 +50,10 @@ else is marked "check".
 ## Build
 
 ```bash
-./gradlew :app:assembleRelease      # app/build/outputs/apk/release/app-release.apk
+./gradlew :app:assembleRelease      # builds split & universal release APKs
 ./gradlew :app:testDebugUnitTest    # name matching, ranking, all three languages
-adb install -r app/build/outputs/apk/release/app-release.apk
+./package.sh                        # packages release APKs and SHA256SUMS into dist/
+adb install -r dist/channel-logos-v1.4.1-universal-release.apk
 ```
 
 Use the release build on the TV: a debuggable build runs several times slower on its CPU.

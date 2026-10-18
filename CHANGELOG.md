@@ -65,7 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Language setting:** only Türkçe, English and Română; until one is chosen the TV's language is
   used and shown as chosen ("System" is gone).
 - **About:** developer (berkbb) and website cards as in Pitwall Updater; the company line is gone.
-- **Package identifier**: renamed from `com.babadogan.channellogos` to `com.berkbb.channellogos`.
+- **Package identifier**: standardized to `com.berkbb.channellogos`.
 
 ### Added
 - **Full-screen read-only license viewer**: like in Pitwall Updater, the About window now features a
