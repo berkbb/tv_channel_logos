@@ -48,6 +48,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The end of a long task, shown full screen until the user closes it. */
     data class Outcome(val success: Boolean, val title: String, val message: String)
 
+    data class PendingItem(
+        val channelId: Long,
+        val channelNumber: String,
+        val channelName: String,
+        val candidate: LogoCandidate
+    )
+
     /** Logos downloaded and ready to write, waiting for the user's go-ahead (see confirmWrite). */
     data class PendingWrite(
         val total: Int,
@@ -58,7 +65,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         /** Chosen logos that could not be downloaded or read; they are left out. */
         val failed: Int,
         /** No backup exists yet: one is taken before writing. */
-        val autoBackup: Boolean
+        val autoBackup: Boolean,
+        /** Channels being modified for the confirmation visual preview. */
+        val previewItems: List<PendingItem> = emptyList()
     )
 
     enum class BackupPlace { USB, INTERNAL }
@@ -80,6 +89,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val usable: Boolean get() = damaged < logos
         /** Fewer than [MATCH_SHARE] of the logos find their channel: the channel list changed a lot. */
         val channelsChanged: Boolean get() = logos > 0 && matched < logos * MATCH_SHARE
+    }
+
+    sealed interface UpdateStatus {
+        data object Idle : UpdateStatus
+        data object Checking : UpdateStatus
+        data class UpToDate(val version: String) : UpdateStatus
+        data class Available(val version: String, val url: String) : UpdateStatus
+        data class Failed(val message: String) : UpdateStatus
     }
 
     data class UiState(
@@ -120,7 +137,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         /** When the logo backup was taken (0: none) and how many logos it holds. */
         val backupTime: Long = 0L,
         val backupCount: Int = 0,
-        val gitHubFailed: Boolean = false
+        val gitHubFailed: Boolean = false,
+        val updateStatus: UpdateStatus = UpdateStatus.Idle
     ) {
         val withLogo: Int get() = channels.count { it.hasLogo }
         val radios: Int get() = channels.count { it.isRadio }
@@ -207,6 +225,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(outcome = error ?: noChannelsWarning(it)) }
             }
             refreshIptvInBackground()
+            checkForUpdates()
+        }
+    }
+
+    /**
+     * Checks GitHub Releases for app updates quietly or when triggered manually.
+     */
+    fun checkForUpdates() {
+        val currentVersion = runCatching {
+            val app = getApplication<Application>()
+            app.packageManager.getPackageInfo(app.packageName, 0).versionName
+        }.getOrNull() ?: "1.3.0"
+        viewModelScope.launch {
+            _state.update { it.copy(updateStatus = UpdateStatus.Checking) }
+            val result = withContext(Dispatchers.IO) {
+                runCatching { AppUpdateChecker.check(currentVersion) }
+            }
+            result.onSuccess { check ->
+                _state.update {
+                    it.copy(
+                        updateStatus = if (check.hasUpdate) UpdateStatus.Available(check.latestVersion, check.htmlUrl)
+                        else UpdateStatus.UpToDate(check.latestVersion)
+                    )
+                }
+            }.onFailure { e ->
+                Log.w(TAG, "Update check failed", e)
+                _state.update { it.copy(updateStatus = UpdateStatus.Failed(e.message ?: "Failed")) }
+            }
         }
     }
 
@@ -457,6 +503,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             prepared = logos
             preparedPoor = poor
             val byId = _state.value.channels.associateBy { it.id }
+            val previewItems = logos.keys.take(5).mapNotNull { id ->
+                val channel = byId[id] ?: return@mapNotNull null
+                val candidate = _state.value.suggestions[id] ?: return@mapNotNull null
+                PendingItem(id, channel.number, channel.name, candidate)
+            }
             _state.update {
                 it.copy(
                     busy = false,
@@ -466,7 +517,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         replacing = logos.keys.count { id -> byId[id]?.hasLogo == true },
                         lowQuality = poor.size,
                         failed = chosen.size - logos.size,
-                        autoBackup = needsAutoBackup()
+                        autoBackup = needsAutoBackup(),
+                        previewItems = previewItems
                     )
                 )
             }

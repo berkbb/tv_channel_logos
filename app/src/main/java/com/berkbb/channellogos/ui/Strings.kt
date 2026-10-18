@@ -432,4 +432,20 @@ object Strings {
         "The $count channels this app changed will go back to how they were: their earlier logo is put back, or removed if they had none.",
         "Cele $count canale modificate de această aplicație vor reveni la starea inițială: logo-ul anterior este pus la loc sau șters dacă nu aveau unul."
     )
+
+    val shortcutClear get() = t("Kaldır", "Clear", "Șterge")
+    val shortcutSelectSafe get() = t("Güvenlileri Seç", "Select Safe", "Selectează sigure")
+    val shortcutToggleView get() = t("Görünüm", "Toggle View", "Comutare")
+    val shortcutWrite get() = t("Yaz", "Write", "Scrie")
+    val shortcutsSection get() = t("Kumanda Kısayolları", "Remote Shortcuts", "Scurtături telecomandă")
+
+    val checkUpdates get() = t("Güncellemeleri Denetle", "Check for Updates", "Verifică actualizările")
+    val checkingUpdates get() = t("Güncellemeler denetleniyor…", "Checking for updates…", "Se verifică actualizările…")
+    val upToDate get() = t("En güncel sürümü kullanıyorsunuz", "You are using the latest version", "Utilizați cea mai recentă versiune")
+    fun updateAvailable(version: String) = t("Yeni sürüm mevcut: $version", "New version available: $version", "Versiune nouă disponibilă: $version")
+    val updateFailed get() = t("Güncelleme denetlenemedi", "Could not check for updates", "Nu s-au putut verifica actualizările")
+    fun updateBadge(version: String) = t("v$version Mevcut", "v$version Available", "v$version Disponibil")
+
+    val previewBeforeWrite get() = t("Değiştirilecek Logolar", "Logos to be Written", "Logo-uri de scris")
+    fun andMoreChannels(count: Int) = t("+ $count kanal daha", "+ $count more channels", "+ încă $count canale")
 }

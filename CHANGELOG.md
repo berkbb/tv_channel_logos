@@ -39,6 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself, preventing broken operations and offering a single Exit action.
 - **Active logo endpoint probe**: proactively probes the TV Provider and channel logo URI (`/channel/1/logo`)
   on launch via `TvLogoTool probe` to detect TVs without logo support upfront.
+- **Remote hardware navigation & number jump**: use Channel +/- or Page Up/Down on the TV remote to scroll
+  through channel lists by page; typing digits jumps directly to matching channel numbers.
+- **Remote color key shortcuts**: TV remote color keys (Red: clear/deselect, Green: select safe, Yellow: toggle
+  missing/all view, Blue: write selection) with a legend in the action panel.
+- **Checkerboard transparency background**: subtle checkerboard tile behind all logo previews ensures transparent
+  PNGs with white text or borders are clearly visible.
+- **In-app update checker**: About window includes a "Check for Updates" action querying GitHub Releases, and
+  surfaces a badge in the header when a newer version is available.
+- **Write confirmation visual preview**: the confirmation screen renders preview cards showing sample channels
+  and their new logos before writing to the TV database.
 - **Logos from the TV's storage**: images in the TV's own storage are matched by name like those
   on a USB stick ("USB" in the sources setting is now "Files"). App data (`Android`), lost files
   and the logo backups are not searched; for the same name a stick's file wins.

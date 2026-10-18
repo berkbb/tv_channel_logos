@@ -62,6 +62,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -129,6 +133,9 @@ fun MainScreen(viewModel: MainViewModel) {
     var showBackups by remember { mutableStateOf(false) }
     val connected = state.connection == MainViewModel.Connection.Connected
 
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
     if (state.unsupportedReason != null) {
         UnsupportedTvScreen(reason = state.unsupportedReason!!)
         return
@@ -139,12 +146,64 @@ fun MainScreen(viewModel: MainViewModel) {
             .fillMaxSize()
             .background(Background)
             .onPreviewKeyEvent { event ->
-                if (searchFocused || event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.nativeKeyEvent.keyCode) {
+                    android.view.KeyEvent.KEYCODE_PROG_RED -> {
+                        if (state.selected.isNotEmpty()) {
+                            viewModel.selectNone()
+                            return@onPreviewKeyEvent true
+                        } else if (search.text.isNotEmpty()) {
+                            onSearch(TextFieldValue(""))
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                    android.view.KeyEvent.KEYCODE_PROG_GREEN -> {
+                        if (!state.busy) {
+                            if (state.selected.isEmpty()) viewModel.selectSafe() else viewModel.selectNone()
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                    android.view.KeyEvent.KEYCODE_PROG_YELLOW -> {
+                        if (!state.busy) {
+                            viewModel.setShowAll(!state.showAll)
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                    android.view.KeyEvent.KEYCODE_PROG_BLUE -> {
+                        if (!state.busy && state.selected.isNotEmpty()) {
+                            viewModel.applySelected()
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                    android.view.KeyEvent.KEYCODE_PAGE_DOWN,
+                    android.view.KeyEvent.KEYCODE_CHANNEL_DOWN -> {
+                        scope.launch {
+                            val nextIndex = minOf(listState.firstVisibleItemIndex + 8, state.visibleChannels.lastIndex.coerceAtLeast(0))
+                            listState.animateScrollToItem(nextIndex)
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                    android.view.KeyEvent.KEYCODE_PAGE_UP,
+                    android.view.KeyEvent.KEYCODE_CHANNEL_UP -> {
+                        scope.launch {
+                            val prevIndex = maxOf(listState.firstVisibleItemIndex - 8, 0)
+                            listState.animateScrollToItem(prevIndex)
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                }
+                if (searchFocused) return@onPreviewKeyEvent false
                 if (event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) return@onPreviewKeyEvent false
                 val code = event.utf16CodePoint
                 if (code == 0 || !Character.isLetterOrDigit(code)) return@onPreviewKeyEvent false
                 val text = search.text + String(Character.toChars(code))
                 onSearch(TextFieldValue(text, TextRange(text.length)))
+                if (text.all { it.isDigit() }) {
+                    val matchIndex = state.visibleChannels.indexOfFirst { it.number == text }
+                    if (matchIndex >= 0) {
+                        scope.launch { listState.animateScrollToItem(matchIndex) }
+                    }
+                }
                 runCatching { searchFocus.requestFocus() }
                 true
             }
@@ -207,6 +266,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 }
                 ChannelList(
                     state, viewModel,
+                    listState = listState,
                     onChange = { picking = it },
                     onLongPress = { quickMenu = it },
                     modifier = Modifier.weight(1f).fillMaxWidth()
@@ -260,11 +320,11 @@ fun MainScreen(viewModel: MainViewModel) {
             (if (state.sourcesUpdatedAt > 0L) "\n" + Strings.sourcesUpdatedAt(Strings.dateTime(state.sourcesUpdatedAt)) else "")
         SettingsDialog(state.settings, sourcesInfo, onChange = viewModel::updateSettings, onDismiss = { showSettings = false })
     }
-    if (showAbout) AboutDialog(onDismiss = { showAbout = false })
+    if (showAbout) AboutDialog(viewModel, onDismiss = { showAbout = false })
     // Progress and results cover the whole screen: a line at the bottom of the panel went unseen.
     if (state.busy && state.connection == MainViewModel.Connection.Connected) BusyScreen(state.status)
     else if (state.outcome != null) OutcomeScreen(state.outcome!!, onDismiss = viewModel::dismissOutcome)
-    else state.pendingWrite?.let { WriteConfirmScreen(it, onWrite = viewModel::confirmWrite, onCancel = viewModel::cancelWrite) }
+    else state.pendingWrite?.let { WriteConfirmScreen(it, viewModel, onWrite = viewModel::confirmWrite, onCancel = viewModel::cancelWrite) }
     confirming?.let { (message, action) ->
         TvDialog(
             title = Strings.confirm,
@@ -298,6 +358,9 @@ private fun Header(state: MainViewModel.UiState, onBackups: () -> Unit, onSettin
                     Badge(Strings.withLogoCount(state.withLogo), dot = Green)
                     Badge(Strings.withoutLogoCount(state.channels.size - state.withLogo), dot = Orange)
                     Badge(Strings.connected, dot = Green)
+                    (state.updateStatus as? MainViewModel.UpdateStatus.Available)?.let { update ->
+                        Badge(Strings.updateBadge(update.version), dot = Accent)
+                    }
                 }
             } else {
                 Text(Strings.appSubtitle, color = TextSecondary, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -364,7 +427,7 @@ private fun InfoCard(
 /** Notices about the sources, shown only when there is something to say. */
 private fun notes(state: MainViewModel.UiState): List<Pair<String, Color>> = buildList {
     if (state.extraCountries.isNotEmpty()) {
-        val names = state.extraCountries.joinToString { java.util.Locale("", it).getDisplayCountry(Strings.locale) }
+        val names = state.extraCountries.joinToString { java.util.Locale.Builder().setRegion(it).build().getDisplayCountry(Strings.locale) }
         add(Strings.extraCountries(names) to Accent)
     }
     if (state.tvTableMissing) add(Strings.tvTableMissing to Orange)
@@ -454,6 +517,27 @@ private fun ActionPanel(
             TvButton(Strings.rescan, icon = "⟳", onClick = viewModel::scan, enabled = idle, small = true, modifier = Modifier.weight(1f))
             TvButton(Strings.refreshSources, icon = "⇣", onClick = viewModel::refreshSources, enabled = idle, small = true, modifier = Modifier.weight(1f))
         }
+
+        PanelSection(Strings.shortcutsSection)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ShortcutBadge(Color(0xFFFF3B30), Strings.shortcutClear)
+            ShortcutBadge(Color(0xFF34C759), Strings.shortcutSelectSafe)
+            ShortcutBadge(Color(0xFFFFCC00), Strings.shortcutToggleView)
+            ShortcutBadge(Color(0xFF007AFF), Strings.shortcutWrite)
+        }
+    }
+}
+
+@Composable
+private fun ShortcutBadge(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).background(color, CircleShape))
+        Spacer(Modifier.width(4.dp))
+        Text(label, color = TextSecondary, fontSize = 11.sp, maxLines = 1)
     }
 }
 
@@ -565,11 +649,12 @@ private fun SearchField(
 private fun ChannelList(
     state: MainViewModel.UiState,
     viewModel: MainViewModel,
+    listState: LazyListState,
     onChange: (Channel) -> Unit,
     onLongPress: (Channel) -> Unit,
     modifier: Modifier
 ) {
-    LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    LazyColumn(modifier = modifier, state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         items(state.visibleChannels, key = { it.id }) { channel ->
             val suggestion = state.suggestions[channel.id]
             ChannelRow(
@@ -799,7 +884,12 @@ private fun QuickMenu(
 
 /** Full-screen check before writing: how many logos, which replace existing ones, which look poor. */
 @Composable
-private fun WriteConfirmScreen(pending: MainViewModel.PendingWrite, onWrite: (skipLowQuality: Boolean) -> Unit, onCancel: () -> Unit) {
+private fun WriteConfirmScreen(
+    pending: MainViewModel.PendingWrite,
+    viewModel: MainViewModel,
+    onWrite: (skipLowQuality: Boolean) -> Unit,
+    onCancel: () -> Unit
+) {
     Dialog(
         onDismissRequest = onCancel,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
@@ -820,6 +910,57 @@ private fun WriteConfirmScreen(pending: MainViewModel.PendingWrite, onWrite: (sk
                 if (pending.lowQuality > 0) Text(Strings.lowQualityWarning(pending.lowQuality), color = Orange, fontSize = 17.sp)
                 if (pending.failed > 0) Text(Strings.prepareFailed(pending.failed), color = Orange, fontSize = 17.sp)
                 if (pending.autoBackup) Text(Strings.autoBackupNote, color = TextSecondary, fontSize = 16.sp)
+            }
+            if (pending.previewItems.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 760.dp)
+                        .fillMaxWidth()
+                        .background(Surface, RoundedCornerShape(12.dp))
+                        .padding(16.dp)
+                ) {
+                    Caption(Strings.previewBeforeWrite.uppercase(Strings.locale))
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        for (item in pending.previewItems) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(Background, RoundedCornerShape(8.dp))
+                                    .padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    "${item.channelNumber} ${item.channelName}",
+                                    color = TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                LogoPreview(
+                                    candidate = item.candidate,
+                                    viewModel = viewModel,
+                                    modifier = Modifier.size(width = 54.dp, height = 40.dp)
+                                )
+                            }
+                        }
+                    }
+                    if (pending.total > pending.previewItems.size) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            Strings.andMoreChannels(pending.total - pending.previewItems.size),
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            modifier = Modifier.align(Alignment.End)
+                        )
+                    }
+                }
             }
             Spacer(Modifier.height(32.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1121,10 +1262,11 @@ private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Bool
             val current by produceState<ImageBitmap?>(null, channel.id) { value = viewModel.currentLogo(channel) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier = Modifier.size(width = 68.dp, height = 52.dp).background(Color(0xFFE5E5EA), RoundedCornerShape(8.dp)),
+                    modifier = Modifier.size(width = 68.dp, height = 52.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF2F2F7)),
                     contentAlignment = Alignment.Center
                 ) {
-                    current?.let { Image(it, contentDescription = Strings.currentLogo, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
+                    CheckerboardPattern(modifier = Modifier.fillMaxSize())
+                    current?.let { Image(it, contentDescription = Strings.currentLogo, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(2.dp)) }
                 }
                 Spacer(Modifier.width(16.dp))
                 Text(Strings.currentLogo, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -1299,12 +1441,13 @@ private fun SettingRow(title: String, description: String, options: @Composable 
 }
 
 @Composable
-private fun AboutDialog(onDismiss: () -> Unit) {
+private fun AboutDialog(viewModel: MainViewModel, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val version = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     }
     var showLicense by remember { mutableStateOf(false) }
+    val state by viewModel.state.collectAsState()
     TvDialog(
         title = Strings.about,
         onDismiss = onDismiss,
@@ -1325,6 +1468,17 @@ private fun AboutDialog(onDismiss: () -> Unit) {
             }
         },
         footer = {
+            TvButton(
+                when (val update = state.updateStatus) {
+                    is MainViewModel.UpdateStatus.Checking -> Strings.checkingUpdates
+                    is MainViewModel.UpdateStatus.UpToDate -> Strings.upToDate
+                    is MainViewModel.UpdateStatus.Available -> Strings.updateAvailable(update.version)
+                    is MainViewModel.UpdateStatus.Failed -> Strings.updateFailed
+                    else -> Strings.checkUpdates
+                },
+                enabled = state.updateStatus !is MainViewModel.UpdateStatus.Checking,
+                onClick = viewModel::checkForUpdates
+            )
             TvButton(Strings.viewLicense, onClick = { showLicense = true })
         }
     ) {
@@ -1396,14 +1550,42 @@ private fun AboutSection(title: String, text: String) {
 }
 
 @Composable
-private fun LogoPreview(candidate: LogoCandidate, viewModel: MainViewModel) {
+private fun CheckerboardPattern(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val checkSize = 6.dp.toPx()
+        val cols = (size.width / checkSize).toInt() + 1
+        val rows = (size.height / checkSize).toInt() + 1
+        val c2 = Color(0xFFDCDCE0)
+        for (r in 0 until rows) {
+            for (c in 0 until cols) {
+                if ((r + c) % 2 == 1) {
+                    drawRect(
+                        color = c2,
+                        topLeft = androidx.compose.ui.geometry.Offset(c * checkSize, r * checkSize),
+                        size = androidx.compose.ui.geometry.Size(checkSize, checkSize)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LogoPreview(
+    candidate: LogoCandidate,
+    viewModel: MainViewModel,
+    modifier: Modifier = Modifier.size(width = 60.dp, height = 44.dp)
+) {
     val image by produceState<ImageBitmap?>(null, candidate.id) { value = viewModel.preview(candidate) }
-    // Logos are drawn on a light tile: many are dark text meant for a light background.
+    // Logos are drawn on a light tile with a subtle checkerboard pattern for transparent PNG visibility.
     Box(
-        modifier = Modifier.size(width = 60.dp, height = 44.dp).background(Color(0xFFE5E5EA), RoundedCornerShape(8.dp)),
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFFF2F2F7)),
         contentAlignment = Alignment.Center
     ) {
-        image?.let { Image(it, contentDescription = candidate.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
+        CheckerboardPattern(modifier = Modifier.fillMaxSize())
+        image?.let { Image(it, contentDescription = candidate.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(2.dp)) }
     }
 }
 
