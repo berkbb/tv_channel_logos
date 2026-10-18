@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.1] - 2026-10-18
+
+### Added
+- **Search catalogues in logo picker**: added free-text query search in the manual logo picker to instantly search across all enabled catalogues (TV, GitHub, picons, iptv-org, and USB files) for channels with non-standard broadcast names.
+- **Logo resolution and dimensions display**: the Logo Details (INFO) window and the enlarged zoom view now show exact pixel dimensions (`W × H px`) directly from the decoded image bitmaps.
+- **Coverage & health report**: clicking the status badges in the header or the new report button opens an overview displaying channel coverage %, TV vs Radio breakdown, safe match counts, catalog databases sizes, and ignored channels.
+- **Ignore channel from missing list**: holding OK on a channel opens the quick menu with an option to ignore/unignore channels (e.g. promo, test or placeholder channels), preventing them from cluttering the Missing view; includes a reset option in Settings.
+- **Alphabet jump in channel list**: pressing remote Fast-Forward/Next (`>>`) or Rewind/Previous (`<<`) keys jumps smoothly to the next or previous letter group in the channel list.
+
+---
+
 ## [1.4.0] - 2026-10-18
 
 ### Added

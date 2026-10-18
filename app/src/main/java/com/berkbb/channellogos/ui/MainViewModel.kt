@@ -163,7 +163,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 MediaFilter.RADIO_ONLY -> channels.filter { it.isRadio }
             }
             if (!showAll) {
-                list = list.filter { !it.hasLogo }
+                list = list.filter { !it.hasLogo && it.id !in settings.ignoredChannels }
             }
             list = ChannelSearch.filter(list, query)
             return when (sortMode) {
@@ -461,6 +461,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun candidatesFor(channel: Channel): List<LogoCandidate> =
         LogoMatching.candidates(channel.name, catalogs(), channel.serviceKey)
+
+    fun searchCandidates(query: String): List<LogoCandidate> =
+        LogoMatching.search(query, catalogs())
+
+    fun toggleIgnore(channelId: Long) {
+        val current = _state.value.settings.ignoredChannels
+        val updated = if (channelId in current) current - channelId else current + channelId
+        updateSettings(_state.value.settings.copy(ignoredChannels = updated))
+    }
+
+    fun resetIgnored() {
+        updateSettings(_state.value.settings.copy(ignoredChannels = emptySet()))
+    }
 
     /** Every image on USB sticks and in the TV's storage for [channel], those named like it first. */
     fun fileCandidatesFor(channel: Channel): List<LogoCandidate> {

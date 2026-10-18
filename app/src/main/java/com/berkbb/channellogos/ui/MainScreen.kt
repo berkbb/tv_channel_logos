@@ -133,6 +133,7 @@ fun MainScreen(viewModel: MainViewModel) {
     var showBackups by remember { mutableStateOf(false) }
     var focusedChannel by remember { mutableStateOf<Channel?>(null) }
     var showLogoInfo by remember { mutableStateOf<Channel?>(null) }
+    var showHealthReport by remember { mutableStateOf(false) }
     val connected = state.connection == MainViewModel.Connection.Connected
 
     val listState = rememberLazyListState()
@@ -200,6 +201,45 @@ fun MainScreen(viewModel: MainViewModel) {
                         }
                         return@onPreviewKeyEvent true
                     }
+                    android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
+                    android.view.KeyEvent.KEYCODE_MEDIA_NEXT -> {
+                        val currentIdx = listState.firstVisibleItemIndex
+                        val channels = state.visibleChannels
+                        if (channels.isNotEmpty() && currentIdx in channels.indices) {
+                            val currentLetter = channels[currentIdx].name.firstOrNull()?.uppercaseChar() ?: ' '
+                            for (i in (currentIdx + 1)..channels.lastIndex) {
+                                val l = channels[i].name.firstOrNull()?.uppercaseChar() ?: ' '
+                                if (l != currentLetter) {
+                                    scope.launch { listState.animateScrollToItem(i) }
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                        }
+                    }
+                    android.view.KeyEvent.KEYCODE_MEDIA_REWIND,
+                    android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
+                        val currentIdx = listState.firstVisibleItemIndex
+                        val channels = state.visibleChannels
+                        if (channels.isNotEmpty() && currentIdx in channels.indices) {
+                            val currentLetter = channels[currentIdx].name.firstOrNull()?.uppercaseChar() ?: ' '
+                            var targetLetter: Char? = null
+                            for (i in (currentIdx - 1) downTo 0) {
+                                val l = channels[i].name.firstOrNull()?.uppercaseChar() ?: ' '
+                                if (l != currentLetter) {
+                                    targetLetter = l
+                                    break
+                                }
+                            }
+                            if (targetLetter != null) {
+                                for (i in 0 until currentIdx) {
+                                    if ((channels[i].name.firstOrNull()?.uppercaseChar() ?: ' ') == targetLetter) {
+                                        scope.launch { listState.animateScrollToItem(i) }
+                                        return@onPreviewKeyEvent true
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 if (searchFocused) return@onPreviewKeyEvent false
                 if (event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) return@onPreviewKeyEvent false
@@ -222,7 +262,8 @@ fun MainScreen(viewModel: MainViewModel) {
             state,
             onBackups = { showBackups = true },
             onSettings = { showSettings = true },
-            onAbout = { showAbout = true }
+            onAbout = { showAbout = true },
+            onHealthReport = { showHealthReport = true }
         )
         Spacer(Modifier.height(16.dp))
         if (!connected) {
@@ -311,10 +352,15 @@ fun MainScreen(viewModel: MainViewModel) {
             hasSuggestion = channel.id in state.suggestions,
             selected = channel.id in state.selected,
             changed = channel.id in state.changed,
+            isIgnored = channel.id in state.settings.ignoredChannels,
             onWrite = { quickMenu = null; viewModel.applyOne(channel.id) },
             onToggle = { quickMenu = null; viewModel.toggle(channel.id) },
             onChange = { quickMenu = null; picking = channel },
             onInfo = { showLogoInfo = channel; quickMenu = null },
+            onToggleIgnore = {
+                quickMenu = null
+                viewModel.toggleIgnore(channel.id)
+            },
             onReset = {
                 quickMenu = null
                 confirming = Strings.confirmReset(1) to { viewModel.resetToDefault(listOf(channel.id)) }
@@ -349,6 +395,7 @@ fun MainScreen(viewModel: MainViewModel) {
         )
     }
     if (showAbout) AboutDialog(viewModel, onDismiss = { showAbout = false })
+    if (showHealthReport) HealthReportDialog(state, onDismiss = { showHealthReport = false })
     // Progress and results cover the whole screen: a line at the bottom of the panel went unseen.
     if (state.busy && state.connection == MainViewModel.Connection.Connected) BusyScreen(state.status)
     else if (state.outcome != null) OutcomeScreen(state.outcome!!, onDismiss = viewModel::dismissOutcome)
@@ -371,7 +418,13 @@ fun MainScreen(viewModel: MainViewModel) {
 
 /** Title with the accent bar, the sources line, and the window buttons on the right. */
 @Composable
-private fun Header(state: MainViewModel.UiState, onBackups: () -> Unit, onSettings: () -> Unit, onAbout: () -> Unit) {
+private fun Header(
+    state: MainViewModel.UiState,
+    onBackups: () -> Unit,
+    onSettings: () -> Unit,
+    onAbout: () -> Unit,
+    onHealthReport: () -> Unit
+) {
     val connected = state.connection == MainViewModel.Connection.Connected
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
@@ -383,9 +436,16 @@ private fun Header(state: MainViewModel.UiState, onBackups: () -> Unit, onSettin
             Spacer(Modifier.height(8.dp))
             if (connected) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Badge("${Strings.channelCount(state.channels.size)}  ·  ${Strings.radioCount(state.radios)}")
-                    Badge(Strings.withLogoCount(state.withLogo), dot = Green)
-                    Badge(Strings.withoutLogoCount(state.channels.size - state.withLogo), dot = Orange)
+                    FocusBox(onClick = onHealthReport) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Badge("${Strings.channelCount(state.channels.size)}  ·  ${Strings.radioCount(state.radios)}")
+                            Badge(Strings.withLogoCount(state.withLogo), dot = Green)
+                            Badge(Strings.withoutLogoCount(state.channels.size - state.withLogo), dot = Orange)
+                        }
+                    }
                     Badge(Strings.connected, dot = Green)
                     (state.updateStatus as? MainViewModel.UpdateStatus.Available)?.let { update ->
                         Badge(Strings.updateBadge(update.version), dot = Accent)
@@ -397,7 +457,10 @@ private fun Header(state: MainViewModel.UiState, onBackups: () -> Unit, onSettin
         }
         Spacer(Modifier.width(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (connected) TvButton(Strings.backupSection, icon = "💾", onClick = onBackups)
+            if (connected) {
+                TvButton(Strings.healthReportTitle, icon = "📊", onClick = onHealthReport)
+                TvButton(Strings.backupSection, icon = "💾", onClick = onBackups)
+            }
             TvButton(Strings.settings, icon = "⚙️", onClick = onSettings)
             TvButton(Strings.about, icon = "ℹ️", onClick = onAbout)
         }
@@ -760,6 +823,9 @@ private fun ChannelRow(
                             color = if (channel.hasLogo) Green else TextSecondary, fontSize = 12.sp
                         )
                         if (changed) Text("  ·  ${Strings.changedMark}", color = Accent, fontSize = 12.sp)
+                        if (channel.id in viewModel.state.value.settings.ignoredChannels) {
+                            Text("  ·  ${Strings.ignoredMark}", color = Orange, fontSize = 12.sp)
+                        }
                         if (suggestion != null) {
                             Text("  ·  ${sourceLabel(suggestion)}  ·  ", color = if (focused) TextPrimary else TextSecondary, fontSize = 12.sp)
                             // Safe matches in green; anything that deserves a look is marked "check" in orange.
@@ -916,10 +982,12 @@ private fun QuickMenu(
     hasSuggestion: Boolean,
     selected: Boolean,
     changed: Boolean,
+    isIgnored: Boolean,
     onWrite: () -> Unit,
     onToggle: () -> Unit,
     onChange: () -> Unit,
     onInfo: () -> Unit,
+    onToggleIgnore: () -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -934,6 +1002,7 @@ private fun QuickMenu(
         } else {
             TvButton(Strings.change, onClick = onChange, modifier = wide.focusRequester(first))
         }
+        TvButton(if (isIgnored) Strings.unignoreChannel else Strings.ignoreChannel, onClick = onToggleIgnore, modifier = wide)
         TvButton(Strings.logoInfoTitle, icon = "ℹ️", onClick = onInfo, modifier = wide)
         if (changed) TvButton(Strings.resetOne, onClick = onReset, modifier = wide)
     }
@@ -1364,12 +1433,20 @@ private fun CloseButton(onClick: () -> Unit) {
 private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Boolean, onDismiss: () -> Unit) {
     val state by viewModel.state.collectAsState()
     var mode by remember { mutableStateOf(PickMode.SUGGESTIONS) }
+    var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
+    val searchFocus = remember { FocusRequester() }
+    LaunchedEffect(mode) {
+        if (mode == PickMode.SEARCH) {
+            runCatching { searchFocus.requestFocus() }
+        }
+    }
     // The folder shown while browsing; null lists the USB sticks and the TV's storage.
     var folder by remember { mutableStateOf<File?>(null) }
     val places = remember(mode) { if (mode == PickMode.BROWSE) viewModel.filePlaces() else emptyList() }
-    val candidates = remember(channel.id, mode) {
+    val candidates = remember(channel.id, mode, searchQuery.text) {
         when (mode) {
             PickMode.SUGGESTIONS -> viewModel.candidatesFor(channel)
+            PickMode.SEARCH -> if (searchQuery.text.isNotBlank()) viewModel.searchCandidates(searchQuery.text) else emptyList()
             PickMode.FILES -> viewModel.fileCandidatesFor(channel)
             PickMode.BROWSE -> emptyList()
         }
@@ -1377,6 +1454,7 @@ private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Bool
     val entries = remember(mode, folder) { folder?.let { viewModel.browse(it) }.orEmpty() }
     // Back goes up a folder, then leaves the browser; it closes the dialog only from the suggestions.
     val goBack: (() -> Unit)? = when {
+        mode == PickMode.SEARCH -> ({ mode = PickMode.SUGGESTIONS })
         mode != PickMode.BROWSE -> null
         folder == null -> ({ mode = PickMode.SUGGESTIONS })
         else -> ({ folder = folder?.parentFile?.takeIf { parent -> places.none { it.dir == folder } } })
@@ -1384,6 +1462,7 @@ private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Bool
     TvDialog(
         title = when (mode) {
             PickMode.SUGGESTIONS -> "${Strings.pickTitle}: ${channel.name}"
+            PickMode.SEARCH -> "${Strings.searchCatalogs}: ${channel.name}"
             PickMode.FILES -> Strings.filesTitle(channel.name)
             PickMode.BROWSE -> Strings.browseTitle(channel.name)
         },
@@ -1393,6 +1472,7 @@ private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Bool
         scrollBody = false,
         footer = {
             if (mode != PickMode.SUGGESTIONS) TvButton(Strings.backToSuggestions, onClick = { mode = PickMode.SUGGESTIONS })
+            if (mode != PickMode.SEARCH) TvButton(Strings.searchCatalogs, icon = "🔍", onClick = { mode = PickMode.SEARCH })
             if (mode != PickMode.FILES) TvButton(Strings.pickFromFiles, onClick = { mode = PickMode.FILES })
             if (mode != PickMode.BROWSE) TvButton(Strings.browseFolders, onClick = { folder = null; mode = PickMode.BROWSE })
             if (mode == PickMode.SUGGESTIONS) {
@@ -1430,6 +1510,34 @@ private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Bool
             )
             return@TvDialog
         }
+        if (mode == PickMode.SEARCH) {
+            BasicTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                singleLine = true,
+                textStyle = TextStyle(color = TextPrimary, fontSize = 16.sp),
+                cursorBrush = SolidColor(Accent),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(searchFocus)
+                    .background(SurfaceVariant, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                decorationBox = { inner ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🔍", fontSize = 15.sp)
+                        Spacer(Modifier.width(10.dp))
+                        Box(Modifier.weight(1f)) {
+                            if (searchQuery.text.isEmpty()) {
+                                Text(Strings.searchCatalogHint, color = TextSecondary, fontSize = 15.sp)
+                            }
+                            inner()
+                        }
+                    }
+                }
+            )
+            Spacer(Modifier.height(10.dp))
+        }
         if (candidates.isEmpty()) Text(if (mode == PickMode.FILES) Strings.filesEmpty else Strings.noCandidates, color = TextSecondary, fontSize = 14.sp)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(candidates, key = { it.id }) { candidate ->
@@ -1439,7 +1547,7 @@ private fun LogoPicker(channel: Channel, viewModel: MainViewModel, changed: Bool
     }
 }
 
-private enum class PickMode { SUGGESTIONS, FILES, BROWSE }
+private enum class PickMode { SUGGESTIONS, SEARCH, FILES, BROWSE }
 
 @Composable
 private fun CandidateRow(candidate: LogoCandidate, viewModel: MainViewModel, issues: Set<com.berkbb.channellogos.logos.LogoQuality.Issue>?, onClick: () -> Unit) {
@@ -1580,6 +1688,11 @@ private fun SettingsDialog(
                 TvButton(label, selected = settings.piconsStyle == code, small = true, onClick = { onChange(settings.copy(piconsStyle = code)) })
             }
         }
+        if (settings.ignoredChannels.isNotEmpty()) {
+            SettingRow(Strings.ignoredChannelsSetting, Strings.ignoredChannelsDesc(settings.ignoredChannels.size)) {
+                TvButton(Strings.resetIgnored, small = true, onClick = { onChange(settings.copy(ignoredChannels = emptySet())) })
+            }
+        }
 
         PanelSection(Strings.storageSection)
         SettingRow(Strings.cacheSizeTitle, Strings.cacheSizeDesc(formatBytes(cacheSize))) {
@@ -1684,6 +1797,60 @@ private fun AboutDialog(viewModel: MainViewModel, onDismiss: () -> Unit) {
 }
 
 @Composable
+private fun HealthReportDialog(state: MainViewModel.UiState, onDismiss: () -> Unit) {
+    val total = state.channels.size
+    val withLogo = state.withLogo
+    val coveragePct = if (total > 0) (withLogo * 100) / total else 0
+    val tvChannels = state.channels.count { !it.isRadio }
+    val radios = state.radios
+    val safeMatches = state.suggestions.values.count { LogoMatching.isSafe(it) }
+
+    TvDialog(
+        title = Strings.healthReportTitle,
+        onDismiss = onDismiss,
+        maxWidth = 600.dp,
+        footer = {
+            TvButton(Strings.ok, primary = true, onClick = onDismiss)
+        }
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            InfoCard(
+                title = Strings.coverageRate,
+                value = "$coveragePct%",
+                modifier = Modifier.weight(1f),
+                valueColor = if (coveragePct >= 80) Green else Orange,
+                extra = "$withLogo / $total"
+            )
+            InfoCard(
+                title = Strings.safeMatchesCount,
+                value = safeMatches.toString(),
+                modifier = Modifier.weight(1f),
+                valueColor = Accent
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        InfoRow(Strings.channelCount(total), "$total (${tvChannels} TV · ${Strings.radioCount(radios)})")
+        InfoRow(Strings.withLogoCount(withLogo), "$withLogo (${coveragePct}%)")
+        InfoRow(Strings.withoutLogoCount(total - withLogo), "${total - withLogo}")
+        if (state.settings.ignoredChannels.isNotEmpty()) {
+            InfoRow(Strings.ignoredChannelsSetting, "${state.settings.ignoredChannels.size}")
+        }
+        Spacer(Modifier.height(8.dp))
+        PanelSection(Strings.catalogsOverview)
+        InfoRow("TV", "${state.tvLogos}")
+        InfoRow("GitHub", "${state.gitHubLogos}")
+        InfoRow("picons", "${state.piconsLogos}")
+        InfoRow("iptv-org", "${state.iptvLogos}")
+        if (state.fileLogos > 0) {
+            InfoRow(Strings.filesSource, "${state.fileLogos}")
+        }
+        if (state.sourcesUpdatedAt > 0L) {
+            InfoRow(Strings.updatedTitle, Strings.dateTime(state.sourcesUpdatedAt))
+        }
+    }
+}
+
+@Composable
 private fun LogoInfoDialog(
     channel: Channel,
     suggestion: LogoCandidate?,
@@ -1692,6 +1859,9 @@ private fun LogoInfoDialog(
     onDismiss: () -> Unit
 ) {
     var showZoom by remember { mutableStateOf(false) }
+    val previewImage by produceState<ImageBitmap?>(null, suggestion?.id) {
+        value = suggestion?.let { viewModel.preview(it) }
+    }
 
     TvDialog(
         title = "${channel.number} ${channel.name}",
@@ -1725,6 +1895,9 @@ private fun LogoInfoDialog(
             Spacer(Modifier.height(8.dp))
             InfoRow(Strings.logoSource, sourceLabel(suggestion))
             InfoRow(Strings.logoReference, suggestion.id)
+            previewImage?.let { img ->
+                InfoRow(Strings.resolution, "${img.width} × ${img.height} px")
+            }
             val tierName = when (suggestion.tier) {
                 com.berkbb.channellogos.logos.LogoEntry.COUNTRY -> Strings.tierCountry
                 com.berkbb.channellogos.logos.LogoEntry.INTERNATIONAL -> Strings.tierInternational
@@ -1765,6 +1938,14 @@ private fun LogoInfoDialog(
                     viewModel = viewModel,
                     modifier = Modifier.size(width = 280.dp, height = 210.dp)
                 )
+                previewImage?.let { img ->
+                    Text(
+                        text = "${img.width} × ${img.height} px",
+                        color = Accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
                 Text(
                     text = "${sourceLabel(suggestion)} · ${suggestion.name.substringAfterLast('/')}",
                     color = TextSecondary,

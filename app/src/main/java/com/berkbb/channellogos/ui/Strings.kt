@@ -514,4 +514,27 @@ object Strings {
         "$matched of $total backed-up logos matched and will be restored.",
         "$matched din $total sigle salvate s-au potrivit și vor fi restaurate."
     )
+
+    val searchCatalogs get() = t("Kataloglarda Ara", "Search Catalogs", "Căutare în cataloage")
+    val searchCatalogHint get() = t("Kanal adı veya anahtar kelime yazın...", "Type channel name or keyword...", "Scrieți numele canalului sau cuvânt-cheie...")
+    val resolution get() = t("Çözünürlük", "Resolution", "Rezoluție")
+    val healthReportTitle get() = t("Doluluk ve Sağlık Raporu", "Coverage & Health Report", "Raport de acoperire și stare")
+    val coverageRate get() = t("Logo Doluluk Oranı", "Logo Coverage Rate", "Rată de acoperire logo")
+    val safeMatchesCount get() = t("Güvenli Logo Eşleşmeleri", "Safe Logo Matches", "Potriviri sigure de logo")
+    val catalogsOverview get() = t("Katalog Veri Tabanları", "Catalogs Database", "Baze de date cataloage")
+    val ignoreChannel get() = t("Kanalı Yoksay", "Ignore Channel", "Ignoră canalul")
+    val unignoreChannel get() = t("Yoksaymayı Kaldır", "Unignore Channel", "Anulează ignorarea")
+    val ignoredChannelsSetting get() = t("Yoksayılan Kanallar", "Ignored Channels", "Canale ignorate")
+    fun ignoredChannelsDesc(count: Int) = t(
+        "$count kanal eksik listesinde gizleniyor.",
+        "$count channels hidden from missing list.",
+        "$count canale ascunse din lista celor lipsă."
+    )
+    val resetIgnored get() = t("Yoksayılanları Temizle", "Clear Ignored", "Șterge canalele ignorate")
+    val ignoredMark get() = t("Yoksayıldı", "Ignored", "Ignorat")
+    val alphabetJumpHint get() = t(
+        "Harf atlamak için kumandadan >> / << tuşlarını kullanabilirsiniz.",
+        "Use >> / << remote keys to jump between letter groups.",
+        "Folosiți tastele >> / << de pe telecomandă pentru a sări între litere."
+    )
 }

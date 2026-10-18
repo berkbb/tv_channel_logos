@@ -155,4 +155,12 @@ class LogoMatchingTest {
         val picon = LogoMatching.candidates("ATV HD", withPicons, serviceKey = "1A_2_1").single { it.id == "picons:kanal7" }
         assertFalse(LogoMatching.isSafe(picon))
     }
+
+    @Test
+    fun searchFindsDirectAndSubstringMatchesAcrossCatalogs() {
+        val results = LogoMatching.search("spor", catalogs)
+        assertTrue(results.any { it.name.contains("spor", ignoreCase = true) || it.id.contains("spor") })
+        val trtResults = LogoMatching.search("trt", catalogs)
+        assertTrue(trtResults.any { it.name.contains("trt", ignoreCase = true) || it.id.contains("trt") })
+    }
 }

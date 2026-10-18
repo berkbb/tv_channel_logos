@@ -75,6 +75,69 @@ object LogoMatching {
         return result.values.take(limit - 1) + textLogo(channelName)
     }
 
+    /** Free-text search across all enabled catalogues for manual logo picking. */
+    fun search(query: String, catalogs: Catalogs, limit: Int = 30): List<LogoCandidate> {
+        val clean = NameMatcher.key(query)
+        if (clean.length < 2) return emptyList()
+        val result = LinkedHashMap<String, LogoCandidate>()
+        matches(query, catalogs, serviceKey = null).sortedWith(RANKING).forEach { result.putIfAbsent(it.id, it) }
+
+        val matchedEntries = ArrayList<Pair<Int, LogoCandidate>>()
+        for ((k, entry) in catalogs.files) {
+            val score = when {
+                k == clean -> 0
+                k.startsWith(clean) -> 1
+                k.contains(clean) -> 2
+                else -> -1
+            }
+            if (score >= 0) matchedEntries += score to linkCandidate(LogoSource.FILE, entry, if (score == 0) NameMatcher.Strength.EXACT else NameMatcher.Strength.LOOSE)
+        }
+        for ((k, entry) in catalogs.tv) {
+            val score = when {
+                k == clean -> 0
+                k.startsWith(clean) -> 1
+                k.contains(clean) -> 2
+                else -> -1
+            }
+            if (score >= 0) matchedEntries += score to tvCandidate(k, entry, if (score == 0) NameMatcher.Strength.EXACT else NameMatcher.Strength.LOOSE)
+        }
+        for ((k, entry) in catalogs.gitHub) {
+            val score = when {
+                k == clean -> 0
+                k.startsWith(clean) -> 1
+                k.contains(clean) -> 2
+                else -> -1
+            }
+            if (score >= 0) matchedEntries += score to linkCandidate(LogoSource.GITHUB, entry, if (score == 0) NameMatcher.Strength.EXACT else NameMatcher.Strength.LOOSE)
+        }
+        for ((k, entry) in catalogs.picons) {
+            val score = when {
+                k == clean -> 0
+                k.startsWith(clean) -> 1
+                k.contains(clean) -> 2
+                else -> -1
+            }
+            if (score >= 0) matchedEntries += score to linkCandidate(LogoSource.PICONS, entry, if (score == 0) NameMatcher.Strength.EXACT else NameMatcher.Strength.LOOSE)
+        }
+        for ((k, entry) in catalogs.iptv) {
+            val score = when {
+                k == clean -> 0
+                k.startsWith(clean) -> 1
+                k.contains(clean) -> 2
+                else -> -1
+            }
+            if (score >= 0) matchedEntries += score to linkCandidate(LogoSource.IPTV, entry, if (score == 0) NameMatcher.Strength.EXACT else NameMatcher.Strength.LOOSE)
+        }
+
+        matchedEntries.sortedWith(compareBy({ it.first }, { it.second.tier }, { it.second.source.ordinal }, { it.second.name.length }))
+            .forEach { (_, candidate) ->
+                if (result.size < limit) {
+                    result.putIfAbsent(candidate.id, candidate)
+                }
+            }
+        return result.values.take(limit)
+    }
+
     // picons' name entries are never of the TV's country, so only service matches can be safe.
     private val SAFE_SOURCES = setOf(LogoSource.FILE, LogoSource.TV, LogoSource.GITHUB, LogoSource.PICONS)
 

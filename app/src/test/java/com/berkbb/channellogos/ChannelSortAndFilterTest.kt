@@ -64,6 +64,33 @@ class ChannelSortAndFilterTest {
     }
 
     @Test
+    fun ignoredChannelsAreExcludedFromMissingView() {
+        val ch1 = ch(1, "1", "TRT 1", hasLogo = false)
+        val ch2 = ch(2, "2", "ATV", hasLogo = false)
+        val ch3 = ch(3, "3", "TEST CHANNEL", hasLogo = false)
+        val all = listOf(ch1, ch2, ch3)
+
+        val settings = com.berkbb.channellogos.settings.Settings(ignoredChannels = setOf(3L))
+        val stateMissing = MainViewModel.UiState(channels = all, showAll = false, settings = settings)
+        assertEquals(listOf(1L, 2L), stateMissing.visibleChannels.map { it.id })
+
+        val stateAll = MainViewModel.UiState(channels = all, showAll = true, settings = settings)
+        assertEquals(listOf(1L, 2L, 3L), stateAll.visibleChannels.map { it.id })
+    }
+
+    @Test
+    fun settingsSerializesIgnoredChannels() {
+        val settings = com.berkbb.channellogos.settings.Settings(
+            ignoredChannels = setOf(10L, 20L, 30L)
+        )
+        val map = settings.toMap()
+        assertEquals("10,20,30", map["ignored_channels"])
+
+        val loaded = com.berkbb.channellogos.settings.Settings.fromMap(map)
+        assertEquals(setOf(10L, 20L, 30L), loaded.ignoredChannels)
+    }
+
+    @Test
     fun dvbServiceKeyFormatting() {
         // Türksat 42E ATV HD: onid=1, tsid=8, sid=701 (0x2BD)
         val key = com.berkbb.channellogos.tv.serviceKey("1", "8", "701")
