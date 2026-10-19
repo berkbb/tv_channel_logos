@@ -53,7 +53,7 @@ else is marked "check".
 ./gradlew :app:assembleRelease      # builds split & universal release APKs
 ./gradlew :app:testDebugUnitTest    # name matching, ranking, all three languages
 ./package.sh                        # packages release APKs and SHA256SUMS into dist/
-adb install -r dist/channel-logos-v1.4.4-universal-release.apk
+adb install -r dist/channel-logos-v1.4.5-universal-release.apk
 ```
 
 Use the release build on the TV: a debuggable build runs several times slower on its CPU.

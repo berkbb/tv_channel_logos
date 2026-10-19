@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.5] - 2026-10-19
+
+### Fixed
+- **Header on 1080p TVs**: the title and the buttons share one row and the channel badges have a full-width row below,
+  so the title no longer wraps and the badges are no longer cut off ("40" instead of "407 with logo", "Connected"
+  hidden).
+
+---
+
 ## [1.4.4] - 2026-10-19
 
 ### Added
