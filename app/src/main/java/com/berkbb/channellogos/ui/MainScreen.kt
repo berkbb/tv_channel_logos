@@ -426,40 +426,43 @@ private fun Header(
     onHealthReport: () -> Unit
 ) {
     val connected = state.connection == MainViewModel.Connection.Connected
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AccentBar()
-                Spacer(Modifier.width(14.dp))
-                Text(Strings.appTitle, color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-            }
-            Spacer(Modifier.height(8.dp))
-            if (connected) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FocusBox(onClick = onHealthReport) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Badge("${Strings.channelCount(state.channels.size)}  ·  ${Strings.radioCount(state.radios)}")
-                            Badge(Strings.withLogoCount(state.withLogo), dot = Green)
-                            Badge(Strings.withoutLogoCount(state.channels.size - state.withLogo), dot = Orange)
-                        }
-                    }
-                    Badge(Strings.connected, dot = Green)
+    // Title and buttons on one row, the badges on a full-width row below: squeezed beside the
+    // buttons on a 1080p TV, the title wrapped and the badges were cut off ("40" for "407 with logo").
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AccentBar()
+            Spacer(Modifier.width(14.dp))
+            Text(
+                Strings.appTitle, color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp,
+                maxLines = 1, softWrap = false, modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (connected) {
+                    TvButton(Strings.healthReportTitle, icon = "📊", onClick = onHealthReport)
+                    TvButton(Strings.backupSection, icon = "💾", onClick = onBackups)
                 }
-            } else {
-                Text(Strings.appSubtitle, color = TextSecondary, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                TvButton(Strings.settings, icon = "⚙️", onClick = onSettings)
+                TvButton(Strings.about, icon = "ℹ️", onClick = onAbout)
             }
         }
-        Spacer(Modifier.width(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (connected) {
-                TvButton(Strings.healthReportTitle, icon = "📊", onClick = onHealthReport)
-                TvButton(Strings.backupSection, icon = "💾", onClick = onBackups)
+        Spacer(Modifier.height(10.dp))
+        if (connected) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                FocusBox(onClick = onHealthReport) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Badge("${Strings.channelCount(state.channels.size)}  ·  ${Strings.radioCount(state.radios)}")
+                        Badge(Strings.withLogoCount(state.withLogo), dot = Green)
+                        Badge(Strings.withoutLogoCount(state.channels.size - state.withLogo), dot = Orange)
+                    }
+                }
+                Badge(Strings.connected, dot = Green)
             }
-            TvButton(Strings.settings, icon = "⚙️", onClick = onSettings)
-            TvButton(Strings.about, icon = "ℹ️", onClick = onAbout)
+        } else {
+            Text(Strings.appSubtitle, color = TextSecondary, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
