@@ -500,7 +500,16 @@ object Strings {
         "Press INSTALL in the installation prompt on the TV. The app reopens after the update.",
         "Apăsați INSTALARE în solicitarea de instalare de pe televizor. Aplicația se redeschide după actualizare."
     )
-    fun updateBadge(version: String) = t("v$version Mevcut", "v$version Available", "v$version Disponibil")
+    fun updateNote(version: String) = t(
+        "Kanal Logoları v$version yayınlandı: Hakkında > Güncellemeleri Denetle ile kurabilirsiniz.",
+        "Channel Logos v$version is out: install it with About > Check for Updates.",
+        "Logo-uri canale v$version a fost lansată: instalați-o din Despre > Verifică actualizările."
+    )
+    val signatureConflict get() = t(
+        "Yüklü Kanal Logoları farklı bir anahtarla imzalanmış; yeni sürüm üzerine kurulamaz. Uygulamayı kaldırıp yeni sürümü yeniden kurun (ayarlar ve logo yedekleri uygulama verisiyle birlikte silinir; TV'ye yazılan logolar kalır).",
+        "The installed Channel Logos is signed with a different key, so the new version cannot install over it. Uninstall the app, then install the new version (settings and logo backups are removed with the app data; logos written to the TV stay).",
+        "Logo-uri canale instalat este semnat cu o altă cheie, deci noua versiune nu se poate instala peste el. Dezinstalați aplicația, apoi instalați noua versiune (setările și copiile de siguranță se șterg cu datele aplicației; logo-urile scrise pe televizor rămân)."
+    )
 
     val previewBeforeWrite get() = t("Değiştirilecek Logolar", "Logos to be Written", "Logo-uri de scris")
     fun andMoreChannels(count: Int) = t("+ $count kanal daha", "+ $count more channels", "+ încă $count canale")

@@ -20,7 +20,8 @@ object SelfInstaller {
     /** Result of the system installer, for the ViewModel. Success rarely arrives: the app is replaced first. */
     sealed interface Event {
         data object Success : Event
-        data class Failure(val message: String) : Event
+        /** [signatureConflict]: the installed app has a different signing key; it must be uninstalled first. */
+        data class Failure(val message: String, val signatureConflict: Boolean = false) : Event
     }
 
     private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 4)
@@ -80,7 +81,9 @@ class InstallResultReceiver : BroadcastReceiver() {
             else -> {
                 RestartAfterUpdateReceiver.disarm(context)
                 val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "Code $status"
-                SelfInstaller.emit(SelfInstaller.Event.Failure(message))
+                val conflict = status == PackageInstaller.STATUS_FAILURE_CONFLICT || message.contains("UPDATE_INCOMPATIBLE") ||
+                    message.contains("signatures do not match", ignoreCase = true)
+                SelfInstaller.emit(SelfInstaller.Event.Failure(message, conflict))
             }
         }
     }

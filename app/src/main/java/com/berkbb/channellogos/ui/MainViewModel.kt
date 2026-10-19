@@ -210,7 +210,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             com.berkbb.channellogos.update.SelfInstaller.events.collect { event ->
                 if (event is com.berkbb.channellogos.update.SelfInstaller.Event.Failure) {
-                    _state.update { it.copy(outcome = Outcome(false, Strings.updateInstallFailedTitle, Strings.updateInstallFailed(event.message))) }
+                    val message = if (event.signatureConflict) Strings.signatureConflict else Strings.updateInstallFailed(event.message)
+                    _state.update { it.copy(outcome = Outcome(false, Strings.updateInstallFailedTitle, message)) }
                 }
             }
         }
@@ -227,7 +228,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val app = getApplication<Application>()
         _state.update { it.copy(outcome = null) }
         if (!app.packageManager.canRequestPackageInstalls()) {
-            _state.update { it.copy(outcome = Outcome(false, Strings.installPermissionTitle, Strings.installPermissionNeeded)) }
+            // "Update Now" here again once the permission is on: no need to check for updates again
+            _state.update { it.copy(outcome = Outcome(false, Strings.installPermissionTitle, Strings.installPermissionNeeded, OutcomeAction.INSTALL_UPDATE)) }
             runCatching {
                 app.startActivity(
                     android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)

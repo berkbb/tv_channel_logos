@@ -447,9 +447,6 @@ private fun Header(
                         }
                     }
                     Badge(Strings.connected, dot = Green)
-                    (state.updateStatus as? MainViewModel.UpdateStatus.Available)?.let { update ->
-                        Badge(Strings.updateBadge(update.version), dot = Accent)
-                    }
                 }
             } else {
                 Text(Strings.appSubtitle, color = TextSecondary, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -518,6 +515,8 @@ private fun InfoCard(
 
 /** Notices about the sources, shown only when there is something to say. */
 private fun notes(state: MainViewModel.UiState): List<Pair<String, Color>> = buildList {
+    // The header's badge row is cut off by the buttons on a 1080p TV; this line is full width.
+    (state.updateStatus as? MainViewModel.UpdateStatus.Available)?.let { add(Strings.updateNote(it.version) to Accent) }
     if (state.extraCountries.isNotEmpty()) {
         val names = state.extraCountries.joinToString { java.util.Locale.Builder().setRegion(it).build().getDisplayCountry(Strings.locale) }
         add(Strings.extraCountries(names) to Accent)
