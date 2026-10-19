@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.4] - 2026-10-19
+
+### Added
+- **Signing check when packaging**: `package.sh` compares the release APK's signing certificate with
+  `release-cert.sha256` and prints a SIGNING KEY MISMATCH warning when they differ: such a build cannot update existing
+  installations, which must uninstall the app and install it again.
+
+### Changed
+- **Update notice above the channel list**: a newer version is announced in the full-width note line above the list;
+  the header badge for it was cut off by the buttons on a 1080p TV.
+- **"Install unknown apps" prompt**: the permission window now has "Update Now" too, so the update continues once the
+  permission is on without checking again.
+- **Signature conflict**: when the installed app has a different signing key, the result says so and explains to
+  uninstall the app and install the new version.
+
+---
+
 ## [1.4.3] - 2026-10-19
 
 ### Added

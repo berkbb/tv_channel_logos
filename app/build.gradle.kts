@@ -18,8 +18,8 @@ android {
         applicationId = "com.berkbb.channellogos"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.4.3"
+        versionCode = 9
+        versionName = "1.4.4"
     }
 
     buildTypes {
