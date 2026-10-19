@@ -398,7 +398,7 @@ fun MainScreen(viewModel: MainViewModel) {
     if (showHealthReport) HealthReportDialog(state, onDismiss = { showHealthReport = false })
     // Progress and results cover the whole screen: a line at the bottom of the panel went unseen.
     if (state.busy && state.connection == MainViewModel.Connection.Connected) BusyScreen(state.status)
-    else if (state.outcome != null) OutcomeScreen(state.outcome!!, onDismiss = viewModel::dismissOutcome)
+    else if (state.outcome != null) OutcomeScreen(state.outcome!!, onDismiss = viewModel::dismissOutcome, onAction = { viewModel.installUpdate() })
     else if (state.pendingWrite != null) WriteConfirmScreen(state.pendingWrite!!, viewModel, onWrite = viewModel::confirmWrite, onCancel = viewModel::cancelWrite)
     else if (state.pendingRestore != null) RestoreConfirmScreen(state.pendingRestore!!, viewModel, onRestore = viewModel::confirmRestore, onCancel = viewModel::cancelRestore)
     confirming?.let { (message, action) ->
@@ -1215,7 +1215,7 @@ private fun BusyScreen(status: String?) {
 
 /** Full-screen result of a task: a green tick or an orange warning, the message and an OK button. */
 @Composable
-private fun OutcomeScreen(outcome: MainViewModel.Outcome, onDismiss: () -> Unit) {
+private fun OutcomeScreen(outcome: MainViewModel.Outcome, onDismiss: () -> Unit, onAction: (MainViewModel.OutcomeAction) -> Unit = {}) {
     Dialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
@@ -1253,7 +1253,18 @@ private fun OutcomeScreen(outcome: MainViewModel.Outcome, onDismiss: () -> Unit)
                 modifier = Modifier.widthIn(max = 760.dp)
             )
             Spacer(Modifier.height(32.dp))
-            TvButton(Strings.ok, primary = true, onClick = onDismiss, modifier = Modifier.focusRequester(okFocus).widthIn(min = 160.dp))
+            val action = outcome.action
+            if (action == null) {
+                TvButton(Strings.ok, primary = true, onClick = onDismiss, modifier = Modifier.focusRequester(okFocus).widthIn(min = 160.dp))
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    TvButton(
+                        Strings.updateNow, primary = true, onClick = { onAction(action) },
+                        modifier = Modifier.focusRequester(okFocus).widthIn(min = 160.dp)
+                    )
+                    TvButton(Strings.later, onClick = onDismiss, modifier = Modifier.widthIn(min = 160.dp))
+                }
+            }
         }
     }
 }

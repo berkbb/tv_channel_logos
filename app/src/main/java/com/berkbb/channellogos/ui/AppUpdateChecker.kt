@@ -9,8 +9,15 @@ object AppUpdateChecker {
     data class CheckResult(
         val latestVersion: String,
         val htmlUrl: String,
-        val hasUpdate: Boolean
+        val hasUpdate: Boolean,
+        /** The release APK for this TV, or null when the release has none to install. */
+        val apk: ApkAsset? = null
     )
+
+    data class ApkAsset(val name: String, val url: String, val size: Long, val sha256: String?)
+
+    /** Release APK names (see package.sh) by Android ABI; the universal APK is the fallback. */
+    private val ABI_SUFFIXES = mapOf("arm64-v8a" to "arm64", "armeabi-v7a" to "arm32", "x86_64" to "x64")
 
     /** GitHub answers 404: no published release, or the repository is not public. */
     class ReleasesUnavailable : Exception("No public release")
@@ -28,7 +35,34 @@ object AppUpdateChecker {
         if (latestVersion.isBlank()) throw ReleasesUnavailable()
         val htmlUrl = json.optString("html_url", "")
         val hasUpdate = isNewerVersion(latestVersion, currentVersionName)
-        return CheckResult(latestVersion, htmlUrl, hasUpdate)
+        val assets = json.optJSONArray("assets")
+        val apks = (0 until (assets?.length() ?: 0)).map { i ->
+            val asset = assets!!.getJSONObject(i)
+            ApkAsset(
+                name = asset.optString("name", ""),
+                url = asset.optString("browser_download_url", ""),
+                size = asset.optLong("size", 0L),
+                sha256 = parseSha256(if (asset.isNull("digest")) null else asset.optString("digest", ""))
+            )
+        }
+        return CheckResult(latestVersion, htmlUrl, hasUpdate, selectApk(apks, android.os.Build.SUPPORTED_ABIS))
+    }
+
+    /** The APK for the first supported ABI the release ships, else the universal APK, else null. */
+    internal fun selectApk(assets: List<ApkAsset>, supportedAbis: Array<String>): ApkAsset? {
+        val apks = assets.filter { it.name.endsWith("-release.apk") && it.url.isNotBlank() }
+        return supportedAbis.asSequence()
+            .mapNotNull { ABI_SUFFIXES[it] }
+            .mapNotNull { suffix -> apks.firstOrNull { it.name.endsWith("-$suffix-release.apk") } }
+            .firstOrNull()
+            ?: apks.firstOrNull { it.name.endsWith("-universal-release.apk") }
+    }
+
+    /** "sha256:abc…" (GitHub's asset digest) as lowercase hex, or null. */
+    internal fun parseSha256(digest: String?): String? {
+        val value = digest?.trim()?.lowercase() ?: return null
+        val hex = value.removePrefix("sha256:")
+        return if (value.startsWith("sha256:") && hex.length == 64 && hex.all { it in "0123456789abcdef" }) hex else null
     }
 
     internal fun isNewerVersion(latest: String, current: String): Boolean {

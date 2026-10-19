@@ -465,6 +465,41 @@ object Strings {
         "GitHub could not be reached. Check the TV's internet connection and try again.",
         "GitHub nu a putut fi accesat. Verificați conexiunea la internet a televizorului și încercați din nou."
     )
+    fun updateAvailableInstall(version: String, current: String) = t(
+        "v$version yayınlandı (yüklü: v$current). Uygulama şimdi kendini indirip kurabilir.",
+        "v$version is out (installed: v$current). The app can download and install itself now.",
+        "v$version a fost lansată (instalată: v$current). Aplicația se poate descărca și instala acum."
+    )
+    val updateNow get() = t("Şimdi Güncelle", "Update Now", "Actualizează acum")
+    val later get() = t("Sonra", "Later", "Mai târziu")
+    fun downloadingUpdate(version: String, percent: Int) = t(
+        "v$version indiriliyor: %$percent",
+        "Downloading v$version: $percent%",
+        "Se descarcă v$version: $percent%"
+    )
+    val updateDownloadFailed get() = t(
+        "Yeni sürüm indirilemedi ya da doğrulanamadı. İnternet bağlantısını denetleyip tekrar deneyin.",
+        "The new version could not be downloaded or verified. Check the internet connection and try again.",
+        "Noua versiune nu a putut fi descărcată sau verificată. Verificați conexiunea la internet și încercați din nou."
+    )
+    val updateInstallFailedTitle get() = t("Güncelleme kurulamadı", "Update not installed", "Actualizarea nu a fost instalată")
+    fun updateInstallFailed(reason: String) = t(
+        "Sistem yükleyicisi güncellemeyi kurmadı. $reason",
+        "The system installer did not install the update. $reason",
+        "Programul de instalare al sistemului nu a instalat actualizarea. $reason"
+    ).trim()
+    val installPermissionTitle get() = t("İzin gerekli", "Permission required", "Permisiune necesară")
+    val installPermissionNeeded get() = t(
+        "Açılan ayarda Kanal Logoları için \"Bilinmeyen uygulamaları yükle\" iznini açın, sonra Şimdi Güncelle'ye tekrar basın.",
+        "In the setting that opens, allow \"Install unknown apps\" for Channel Logos, then press Update Now again.",
+        "În setarea care se deschide, permiteți „Instalare aplicații necunoscute” pentru Logo-uri canale, apoi apăsați din nou Actualizează acum."
+    )
+    val confirmInstallTitle get() = t("Onay bekleniyor", "Waiting for confirmation", "Se așteaptă confirmarea")
+    val confirmInstall get() = t(
+        "TV'de açılan kurulum onayında YÜKLE'ye basın. Güncellemeden sonra uygulama yeniden açılır.",
+        "Press INSTALL in the installation prompt on the TV. The app reopens after the update.",
+        "Apăsați INSTALARE în solicitarea de instalare de pe televizor. Aplicația se redeschide după actualizare."
+    )
     fun updateBadge(version: String) = t("v$version Mevcut", "v$version Available", "v$version Disponibil")
 
     val previewBeforeWrite get() = t("Değiştirilecek Logolar", "Logos to be Written", "Logo-uri de scris")

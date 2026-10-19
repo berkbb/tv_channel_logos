@@ -46,13 +46,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** The end of a long task, shown full screen until the user closes it. */
-    data class Outcome(val success: Boolean, val title: String, val message: String)
+    /** [action]: an extra primary button on the result screen (e.g. install the found update). */
+    data class Outcome(val success: Boolean, val title: String, val message: String, val action: OutcomeAction? = null)
+
+    enum class OutcomeAction { INSTALL_UPDATE }
 
     sealed interface UpdateStatus {
         data object Idle : UpdateStatus
         data object Checking : UpdateStatus
         data class UpToDate(val version: String) : UpdateStatus
-        data class Available(val version: String, val url: String) : UpdateStatus
+        data class Available(val version: String, val url: String, val apk: AppUpdateChecker.ApkAsset? = null) : UpdateStatus
         /** No published release, or the repository is not public. */
         data object Unavailable : UpdateStatus
         data class Failed(val message: String) : UpdateStatus
@@ -204,6 +207,97 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         Strings.setLanguage(_state.value.settings.language)
         refreshCacheSize()
         start()
+        viewModelScope.launch {
+            com.berkbb.channellogos.update.SelfInstaller.events.collect { event ->
+                if (event is com.berkbb.channellogos.update.SelfInstaller.Event.Failure) {
+                    _state.update { it.copy(outcome = Outcome(false, Strings.updateInstallFailedTitle, Strings.updateInstallFailed(event.message))) }
+                }
+            }
+        }
+    }
+
+    /**
+     * Downloads the newer release APK for this TV (progress on the busy screen), checks it against
+     * GitHub's SHA-256 and hands it to the system installer; the TV asks for confirmation and the
+     * app reopens after the update. Without the "Install unknown apps" permission, its setting opens.
+     */
+    fun installUpdate() {
+        val update = _state.value.updateStatus as? UpdateStatus.Available ?: return
+        val apk = update.apk ?: return
+        val app = getApplication<Application>()
+        _state.update { it.copy(outcome = null) }
+        if (!app.packageManager.canRequestPackageInstalls()) {
+            _state.update { it.copy(outcome = Outcome(false, Strings.installPermissionTitle, Strings.installPermissionNeeded)) }
+            runCatching {
+                app.startActivity(
+                    android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                        .setData(android.net.Uri.parse("package:${app.packageName}"))
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+            return
+        }
+        if (_state.value.busy) return
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true, status = Strings.downloadingUpdate(update.version, 0)) }
+            val target = File(app.cacheDir, apk.name)
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { downloadApk(apk, target) { pct -> _state.update { it.copy(status = Strings.downloadingUpdate(update.version, pct)) } } }
+                    .onFailure { Log.w(TAG, "Update download failed", it) }
+                    .getOrDefault(false)
+            }
+            if (!ok) {
+                _state.update { it.copy(busy = false, outcome = Outcome(false, Strings.updateInstallFailedTitle, Strings.updateDownloadFailed)) }
+                return@launch
+            }
+            val started = withContext(Dispatchers.IO) { com.berkbb.channellogos.update.SelfInstaller.install(app, target) }
+            _state.update {
+                it.copy(
+                    busy = false,
+                    outcome = if (started) Outcome(true, Strings.confirmInstallTitle, Strings.confirmInstall)
+                    else Outcome(false, Strings.updateInstallFailedTitle, Strings.updateInstallFailed(""))
+                )
+            }
+        }
+    }
+
+    /** Streams [apk] into a .part file and keeps it only when its SHA-256 (or size) matches the release. */
+    private fun downloadApk(apk: AppUpdateChecker.ApkAsset, target: File, onProgress: (Int) -> Unit): Boolean {
+        val part = File(target.parentFile, target.name + ".part")
+        val connection = (java.net.URL(apk.url).openConnection() as java.net.HttpURLConnection).apply {
+            instanceFollowRedirects = true
+            connectTimeout = 15_000
+            readTimeout = 30_000
+        }
+        try {
+            if (connection.responseCode != 200) return false
+            val total = connection.contentLengthLong.takeIf { it > 0 } ?: apk.size
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            var done = 0L
+            var last = -1
+            connection.inputStream.use { input ->
+                part.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read == -1) break
+                        output.write(buffer, 0, read)
+                        digest.update(buffer, 0, read)
+                        done += read
+                        val pct = if (total > 0) ((done * 100) / total).toInt().coerceIn(0, 100) else 0
+                        if (pct != last) { last = pct; onProgress(pct) }
+                    }
+                }
+            }
+            val sha = digest.digest().joinToString("") { "%02x".format(it) }
+            val valid = if (apk.sha256 != null) sha == apk.sha256 else apk.size > 0 && done == apk.size
+            if (!valid) return false
+            target.delete()
+            return part.renameTo(target)
+        } finally {
+            connection.disconnect()
+            if (part.exists()) part.delete()
+        }
     }
 
     /** Saves [settings]; source and suggestion choices take effect at once on the current list. */
@@ -280,7 +374,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             val status = result.fold(
                 onSuccess = { check ->
-                    if (check.hasUpdate) UpdateStatus.Available(check.latestVersion, check.htmlUrl)
+                    if (check.hasUpdate) UpdateStatus.Available(check.latestVersion, check.htmlUrl, check.apk)
                     else UpdateStatus.UpToDate(check.latestVersion)
                 },
                 onFailure = { e ->
@@ -300,7 +394,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun updateOutcome(status: UpdateStatus, current: String): Outcome? = when (status) {
         is UpdateStatus.UpToDate -> Outcome(true, Strings.upToDateTitle, Strings.upToDate(current))
-        is UpdateStatus.Available -> Outcome(true, Strings.updateAvailableTitle, Strings.updateAvailable(status.version, current))
+        is UpdateStatus.Available -> if (status.apk != null) {
+            Outcome(true, Strings.updateAvailableTitle, Strings.updateAvailableInstall(status.version, current), OutcomeAction.INSTALL_UPDATE)
+        } else {
+            Outcome(true, Strings.updateAvailableTitle, Strings.updateAvailable(status.version, current))
+        }
         is UpdateStatus.Unavailable -> Outcome(false, Strings.updateFailed, Strings.releasesUnavailable)
         is UpdateStatus.Failed -> Outcome(false, Strings.updateFailed, Strings.updateCheckOffline)
         else -> null

@@ -8,6 +8,8 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Updating the app itself from its GitHub releases (About > Check for Updates) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Android 11+: lets the app see which app opens TV channels (to refresh its logo cache) -->
     <queries>
@@ -46,5 +48,17 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Self-update: the installer's result, and reopening the app after the update -->
+        <receiver
+            android:name=".update.InstallResultReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".update.RestartAfterUpdateReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
