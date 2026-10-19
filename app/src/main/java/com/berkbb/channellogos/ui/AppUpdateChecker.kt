@@ -12,11 +12,20 @@ object AppUpdateChecker {
         val hasUpdate: Boolean
     )
 
+    /** GitHub answers 404: no published release, or the repository is not public. */
+    class ReleasesUnavailable : Exception("No public release")
+
     fun check(currentVersionName: String): CheckResult {
-        val jsonBytes = httpGet(RELEASE_API_URL)
+        val jsonBytes = try {
+            httpGet(RELEASE_API_URL)
+        } catch (e: IllegalStateException) {
+            if (e.message?.startsWith("HTTP 404") == true) throw ReleasesUnavailable()
+            throw e
+        }
         val json = JSONObject(jsonBytes.toString(Charsets.UTF_8))
         val rawTag = json.optString("tag_name", "").trim()
         val latestVersion = rawTag.removePrefix("v").trim()
+        if (latestVersion.isBlank()) throw ReleasesUnavailable()
         val htmlUrl = json.optString("html_url", "")
         val hasUpdate = isNewerVersion(latestVersion, currentVersionName)
         return CheckResult(latestVersion, htmlUrl, hasUpdate)

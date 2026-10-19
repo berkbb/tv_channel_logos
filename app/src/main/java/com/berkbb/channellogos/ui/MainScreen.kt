@@ -1743,36 +1743,48 @@ private fun AboutDialog(viewModel: MainViewModel, onDismiss: () -> Unit) {
         onDismiss = onDismiss,
         fullScreen = true,
         textBody = true,
-        header = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Image(
-                    painter = androidx.compose.ui.res.painterResource(com.berkbb.channellogos.R.drawable.ic_launcher),
-                    contentDescription = null,
-                    modifier = Modifier.size(56.dp).background(Surface, RoundedCornerShape(12.dp))
-                )
-                Spacer(Modifier.width(16.dp))
-                Column {
-                    Text(Strings.appTitle, color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    Text("${Strings.version(version)}  ·  ${Strings.aboutLicense}", color = TextSecondary, fontSize = 14.sp)
-                }
-            }
-        },
         footer = {
+            val checking = state.updateStatus is MainViewModel.UpdateStatus.Checking
             TvButton(
-                when (val update = state.updateStatus) {
-                    is MainViewModel.UpdateStatus.Checking -> Strings.checkingUpdates
-                    is MainViewModel.UpdateStatus.UpToDate -> Strings.upToDate
-                    is MainViewModel.UpdateStatus.Available -> Strings.updateAvailable(update.version)
-                    is MainViewModel.UpdateStatus.Failed -> Strings.updateFailed
-                    else -> Strings.checkUpdates
-                },
-                enabled = state.updateStatus !is MainViewModel.UpdateStatus.Checking,
-                onClick = viewModel::checkForUpdates
+                if (checking) Strings.checkingUpdates else Strings.checkUpdates,
+                enabled = !checking,
+                onClick = { viewModel.checkForUpdates() }
             )
             TvButton(Strings.viewLicense, onClick = { showLicense = true })
         }
     ) {
-        Text(Strings.aboutWhat, color = TextPrimary, fontSize = 16.sp)
+        // Hero: icon, name, version and what the app does, as the first thing seen from the sofa
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Accent.copy(alpha = 0.28f), Surface)),
+                    RoundedCornerShape(16.dp)
+                )
+                .padding(horizontal = 28.dp, vertical = 22.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painter = androidx.compose.ui.res.painterResource(com.berkbb.channellogos.R.drawable.ic_launcher),
+                contentDescription = null,
+                modifier = Modifier.size(88.dp).background(Background, RoundedCornerShape(20.dp)).padding(6.dp)
+            )
+            Spacer(Modifier.width(24.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(Strings.appTitle, color = TextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(14.dp))
+                    Badge("v$version", dot = Accent)
+                }
+                Text(Strings.aboutWhat, color = TextSecondary, fontSize = 15.sp, lineHeight = 21.sp)
+            }
+        }
+        // Key facts as cards, as in Pitwall Updater's About window
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            InfoCard(Strings.aboutDeveloperTitle, Strings.aboutDeveloper, Modifier.weight(1f))
+            InfoCard(Strings.aboutWebsiteTitle, Strings.aboutWebsite, Modifier.weight(1.5f), valueColor = Color(0xFF64B5F6))
+            InfoCard(Strings.aboutLicenseTitle, "GNU GPL-3.0", Modifier.weight(1f), valueColor = Green)
+        }
         // Two columns of cards: the body is wide on a TV and long lines are hard to read from the sofa.
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1781,12 +1793,8 @@ private fun AboutDialog(viewModel: MainViewModel, onDismiss: () -> Unit) {
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 AboutSection(Strings.aboutSourcesTitle, Strings.aboutSources)
+                AboutSection(Strings.aboutLicenseTitle, Strings.aboutLicense)
             }
-        }
-        // Developer and website, as in Pitwall Updater's About window
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            InfoCard(Strings.aboutDeveloperTitle, Strings.aboutDeveloper, Modifier.weight(1f))
-            InfoCard(Strings.aboutWebsiteTitle, Strings.aboutWebsite, Modifier.weight(1f), valueColor = Color(0xFF64B5F6))
         }
         AboutSection(Strings.aboutDisclaimerTitle, Strings.aboutDisclaimer)
     }
@@ -1809,6 +1817,7 @@ private fun HealthReportDialog(state: MainViewModel.UiState, onDismiss: () -> Un
         title = Strings.healthReportTitle,
         onDismiss = onDismiss,
         maxWidth = 600.dp,
+        textBody = true,
         footer = {
             TvButton(Strings.ok, primary = true, onClick = onDismiss)
         }

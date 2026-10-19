@@ -439,11 +439,32 @@ object Strings {
     val shortcutWrite get() = t("Yaz", "Write", "Scrie")
     val shortcutsSection get() = t("Kumanda Kısayolları", "Remote Shortcuts", "Scurtături telecomandă")
 
+
     val checkUpdates get() = t("Güncellemeleri Denetle", "Check for Updates", "Verifică actualizările")
     val checkingUpdates get() = t("Güncellemeler denetleniyor…", "Checking for updates…", "Se verifică actualizările…")
-    val upToDate get() = t("En güncel sürümü kullanıyorsunuz", "You are using the latest version", "Utilizați cea mai recentă versiune")
-    fun updateAvailable(version: String) = t("Yeni sürüm mevcut: $version", "New version available: $version", "Versiune nouă disponibilă: $version")
+    val upToDateTitle get() = t("Güncelsiniz", "Up to date", "Actualizat")
+    fun upToDate(current: String) = t(
+        "Yeni sürüm yok; en güncel sürümü (v$current) kullanıyorsunuz.",
+        "No new version; you are using the latest version (v$current).",
+        "Nicio versiune nouă; utilizați cea mai recentă versiune (v$current)."
+    )
+    val updateAvailableTitle get() = t("Yeni sürüm mevcut", "New version available", "Versiune nouă disponibilă")
+    fun updateAvailable(version: String, current: String) = t(
+        "v$version yayınlandı (yüklü: v$current). Yeni APK'yı GitHub'daki sürüm sayfasından indirip kurabilirsiniz.",
+        "v$version is out (installed: v$current). Download and install the new APK from the release page on GitHub.",
+        "v$version a fost lansată (instalată: v$current). Descărcați și instalați noul APK de pe pagina versiunii de pe GitHub."
+    )
     val updateFailed get() = t("Güncelleme denetlenemedi", "Could not check for updates", "Nu s-au putut verifica actualizările")
+    val releasesUnavailable get() = t(
+        "GitHub'da yayınlanmış bir sürüm bulunamadı ya da depo herkese açık değil.",
+        "No published release was found on GitHub, or the repository is not public.",
+        "Nu a fost găsită nicio versiune publicată pe GitHub sau depozitul nu este public."
+    )
+    val updateCheckOffline get() = t(
+        "GitHub'a ulaşılamadı. TV'nin internet bağlantısını denetleyip tekrar deneyin.",
+        "GitHub could not be reached. Check the TV's internet connection and try again.",
+        "GitHub nu a putut fi accesat. Verificați conexiunea la internet a televizorului și încercați din nou."
+    )
     fun updateBadge(version: String) = t("v$version Mevcut", "v$version Available", "v$version Disponibil")
 
     val previewBeforeWrite get() = t("Değiştirilecek Logolar", "Logos to be Written", "Logo-uri de scris")

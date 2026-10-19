@@ -48,6 +48,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The end of a long task, shown full screen until the user closes it. */
     data class Outcome(val success: Boolean, val title: String, val message: String)
 
+    sealed interface UpdateStatus {
+        data object Idle : UpdateStatus
+        data object Checking : UpdateStatus
+        data class UpToDate(val version: String) : UpdateStatus
+        data class Available(val version: String, val url: String) : UpdateStatus
+        /** No published release, or the repository is not public. */
+        data object Unavailable : UpdateStatus
+        data class Failed(val message: String) : UpdateStatus
+    }
+
     data class PendingItem(
         val channelId: Long,
         val channelNumber: String,
@@ -98,14 +108,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val usable: Boolean get() = damaged < logos
         /** Fewer than [MATCH_SHARE] of the logos find their channel: the channel list changed a lot. */
         val channelsChanged: Boolean get() = logos > 0 && matched < logos * MATCH_SHARE
-    }
-
-    sealed interface UpdateStatus {
-        data object Idle : UpdateStatus
-        data object Checking : UpdateStatus
-        data class UpToDate(val version: String) : UpdateStatus
-        data class Available(val version: String, val url: String) : UpdateStatus
-        data class Failed(val message: String) : UpdateStatus
     }
 
     data class UiState(
@@ -257,35 +259,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(outcome = error ?: noChannelsWarning(it)) }
             }
             refreshIptvInBackground()
-            checkForUpdates()
+            checkForUpdates(manual = false)
         }
     }
 
     /**
-     * Checks GitHub Releases for app updates quietly or when triggered manually.
+     * Checks GitHub Releases for a newer app version: quietly at start-up (only the header badge
+     * shows a result), or from About, where every result ends in an [Outcome].
      */
-    fun checkForUpdates() {
+    fun checkForUpdates(manual: Boolean = true) {
+        if (_state.value.updateStatus is UpdateStatus.Checking) return
         val currentVersion = runCatching {
             val app = getApplication<Application>()
             app.packageManager.getPackageInfo(app.packageName, 0).versionName
-        }.getOrNull() ?: "1.3.0"
+        }.getOrNull().orEmpty()
         viewModelScope.launch {
             _state.update { it.copy(updateStatus = UpdateStatus.Checking) }
             val result = withContext(Dispatchers.IO) {
                 runCatching { AppUpdateChecker.check(currentVersion) }
             }
-            result.onSuccess { check ->
-                _state.update {
-                    it.copy(
-                        updateStatus = if (check.hasUpdate) UpdateStatus.Available(check.latestVersion, check.htmlUrl)
-                        else UpdateStatus.UpToDate(check.latestVersion)
-                    )
+            val status = result.fold(
+                onSuccess = { check ->
+                    if (check.hasUpdate) UpdateStatus.Available(check.latestVersion, check.htmlUrl)
+                    else UpdateStatus.UpToDate(check.latestVersion)
+                },
+                onFailure = { e ->
+                    Log.w(TAG, "Update check failed", e)
+                    if (e is AppUpdateChecker.ReleasesUnavailable) UpdateStatus.Unavailable
+                    else UpdateStatus.Failed(e.message ?: "Failed")
                 }
-            }.onFailure { e ->
-                Log.w(TAG, "Update check failed", e)
-                _state.update { it.copy(updateStatus = UpdateStatus.Failed(e.message ?: "Failed")) }
+            )
+            _state.update {
+                it.copy(
+                    updateStatus = status,
+                    outcome = if (manual) updateOutcome(status, currentVersion) else it.outcome
+                )
             }
         }
+    }
+
+    private fun updateOutcome(status: UpdateStatus, current: String): Outcome? = when (status) {
+        is UpdateStatus.UpToDate -> Outcome(true, Strings.upToDateTitle, Strings.upToDate(current))
+        is UpdateStatus.Available -> Outcome(true, Strings.updateAvailableTitle, Strings.updateAvailable(status.version, current))
+        is UpdateStatus.Unavailable -> Outcome(false, Strings.updateFailed, Strings.releasesUnavailable)
+        is UpdateStatus.Failed -> Outcome(false, Strings.updateFailed, Strings.updateCheckOffline)
+        else -> null
     }
 
     /**
