@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.2] - 2026-10-19
+
+### Changed
+- **Refreshed About window**: a hero banner with the app icon, name, version and a short description, followed by
+  Developer, Website and License cards; the license summary sits beside the logo sources.
+- **Clearer update check**: "Check for Updates" in About now always ends in a result window: up to date (with the
+  installed version), a new version with where to get it, no published release / repository not public, or GitHub
+  unreachable. The quiet start-up check only shows the header badge when a newer version exists.
+
+### Fixed
+- **Coverage & health report scrolls with the remote**: Up/Down now scroll the report when it is taller than the screen.
+
+---
+
 ## [1.4.1] - 2026-10-18
 
 ### Added
