@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.3] - 2026-10-19
+
+### Added
+- **Self-update from GitHub**: when "Check for Updates" finds a newer release, "Update Now" downloads the release APK
+  for the TV's processor (arm32 / arm64 / x64, else universal) with progress on the busy screen, checks it against the
+  SHA-256 digest GitHub publishes and installs it over the app after the TV's confirmation prompt; the app reopens by
+  itself after the update. Without the "Install unknown apps" permission its setting opens first. The repository is
+  now public, so the update check reaches GitHub.
+
+---
+
 ## [1.4.2] - 2026-10-19
 
 ### Changed
