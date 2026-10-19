@@ -53,10 +53,12 @@ else is marked "check".
 ./gradlew :app:assembleRelease      # builds split & universal release APKs
 ./gradlew :app:testDebugUnitTest    # name matching, ranking, all three languages
 ./package.sh                        # packages release APKs and SHA256SUMS into dist/
-adb install -r dist/channel-logos-v1.4.3-universal-release.apk
+adb install -r dist/channel-logos-v1.4.4-universal-release.apk
 ```
 
 Use the release build on the TV: a debuggable build runs several times slower on its CPU.
+
+**Release signing.** Installed copies only accept an update signed with the same key, and the in-app update (About > Check for Updates) depends on it. `release-cert.sha256` holds the expected signing certificate; the packaging script compares every release against it and prints a **SIGNING KEY MISMATCH** warning when they differ. A build with a different key cannot update existing installations: on those devices the app must be uninstalled first and the new version installed again, which removes its data. To keep the key, package on the original machine or copy its `~/.android/debug.keystore`.
 
 To check a new version on a TV, follow [TESTING.md](TESTING.md).
 
