@@ -35,6 +35,15 @@ class AppUpdateCheckerTest {
     }
 
     @Test
+    fun universalOnlyReleaseServesEveryAbi() {
+        // Current releases ship only the universal APK (see package.sh)
+        val universalOnly = assets.filter { "-arm" !in it.name && "-x64" !in it.name }
+        for (abis in listOf(arrayOf("armeabi-v7a", "armeabi"), arrayOf("arm64-v8a", "armeabi-v7a"), arrayOf("x86_64"))) {
+            assertEquals("https://example.com/universal.apk", AppUpdateChecker.selectApk(universalOnly, abis)?.url)
+        }
+    }
+
+    @Test
     fun parsesGitHubDigests() {
         val hex = "a".repeat(64)
         assertEquals(hex, AppUpdateChecker.parseSha256("sha256:$hex"))
