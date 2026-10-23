@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Release packaging now produces only `channel-logos-v<version>-universal-release.apk`. The app has no native libraries, so the per-ABI `arm64` / `arm32` / `x64` APKs were identical in content. Installed versions keep updating: the in-app update falls back to the universal APK when no per-ABI APK is published.
+
 ---
 
 ## [1.4.5] - 2026-10-19

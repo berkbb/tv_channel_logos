@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Channel Logos release packager: runs unit tests, assembles release APKs
-# (universal, arm64, arm32, x64) and copies them with a SHA-256 checksum file into dist/.
+# Channel Logos release packager: runs unit tests, assembles the release APK and copies it
+# (as the universal APK, with a SHA-256 checksum file) into dist/. No native code, so one APK serves every TV.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,7 +41,7 @@ if [[ -z "$VERSION" ]]; then
     echo "❌ Could not read versionName from app/build.gradle.kts." >&2
     exit 1
 fi
-APK_DIR="app/build/outputs/apk/release"
+APK="app/build/outputs/apk/release/app-release.apk"
 
 # Signing check: installed apps (and their in-app update) only accept a new version signed with the
 # same key. release-cert.sha256 holds the expected certificate; a mismatch is reported, not fatal.
@@ -75,37 +75,21 @@ check_release_signing() {
 WARN
 }
 
-echo "🧪 Running unit tests and building release v$VERSION (universal, x64, arm64, arm32 APKs)..."
+echo "🧪 Running unit tests and building release v$VERSION..."
 ./gradlew clean test assembleRelease
 
-TARGETS=(
-    "universal:universal"
-    "x86_64:x64"
-    "arm64-v8a:arm64"
-    "armeabi-v7a:arm32"
-)
+if [[ ! -f "$APK" ]]; then
+    echo "❌ Expected output not found: $APK" >&2
+    exit 1
+fi
 
 rm -rf dist
 mkdir -p dist
-
-for pair in "${TARGETS[@]}"; do
-    abi="${pair%%:*}"
-    target="${pair##*:}"
-    src="$APK_DIR/app-${abi}-release.apk"
-    if [[ ! -f "$src" ]]; then
-        src="$APK_DIR/app-${target}-release.apk"
-    fi
-    if [[ ! -f "$src" ]]; then
-        echo "❌ Expected output not found: $src" >&2
-        exit 1
-    fi
-    cp "$src" "dist/channel-logos-v${VERSION}-${target}-release.apk"
-done
-
+cp "$APK" "dist/channel-logos-v${VERSION}-universal-release.apk"
 (cd dist && shasum -a 256 *.apk > SHA256SUMS)
 
 check_release_signing "dist/channel-logos-v${VERSION}-universal-release.apk"
 
-echo "✅ Release packages ready in dist/:"
+echo "✅ Release package ready in dist/:"
 (cd dist && ls -lh *.apk | awk '{print "   " $NF " (" $5 ")"}')
 echo "   SHA256SUMS"

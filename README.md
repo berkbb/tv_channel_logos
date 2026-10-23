@@ -50,9 +50,9 @@ else is marked "check".
 ## Build
 
 ```bash
-./gradlew :app:assembleRelease      # builds split & universal release APKs
+./gradlew :app:assembleRelease      # builds the release APK (one APK for every TV)
 ./gradlew :app:testDebugUnitTest    # name matching, ranking, all three languages
-./package.sh                        # packages release APKs and SHA256SUMS into dist/
+./package.sh                        # packages the universal APK and SHA256SUMS into dist/
 adb install -r dist/channel-logos-v1.4.5-universal-release.apk
 ```
 

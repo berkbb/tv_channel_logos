@@ -16,7 +16,7 @@ object AppUpdateChecker {
 
     data class ApkAsset(val name: String, val url: String, val size: Long, val sha256: String?)
 
-    /** Release APK names (see package.sh) by Android ABI; the universal APK is the fallback. */
+    /** Per-ABI APK names from older releases; current releases (see package.sh) ship only the universal APK. */
     private val ABI_SUFFIXES = mapOf("arm64-v8a" to "arm64", "armeabi-v7a" to "arm32", "x86_64" to "x64")
 
     /** GitHub answers 404: no published release, or the repository is not public. */
