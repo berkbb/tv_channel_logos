@@ -45,7 +45,7 @@ android {
         }
     }
 
-    // Pure Kotlin/Java dependencies, no native libraries: one universal APK serves every ABI
+    // Pure Kotlin/Java dependencies; the only native code is Compose's ~10 KB androidx.graphics.path per ABI, so one universal APK serves every ABI
 }
 
 kotlin {

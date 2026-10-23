@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Channel Logos release packager: runs unit tests, assembles the release APK and copies it
-# (as the universal APK, with a SHA-256 checksum file) into dist/. No native code, so one APK serves every TV.
+# (as the universal APK, with a SHA-256 checksum file) into dist/. Native code is only Compose's
+# ~10 KB graphics-path library per ABI, so one APK serves every TV.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
