@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - **Spreadsheet formulas in the channel list CSV**: cells starting with `=`, `+`, `-`, `@`, a tab or a carriage return
   (channel names come from broadcasters) are prefixed with `'`, so a spreadsheet shows them as text instead of running them.
+- **Release signing off the debug keystore:** release builds were signed with `~/.android/debug.keystore`, whose password is public. Releases now use the TV apps' shared keystore `~/.signing/babadogan-tv-release.p12` (same certificate, so installed TVs keep updating) with a strong password kept in the macOS Keychain, or `keystore.properties` / `CHANNELLOGOS_*` variables; the debug key is only a fallback with a warning.
 
 ---
 
