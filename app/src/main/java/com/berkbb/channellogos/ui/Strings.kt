@@ -539,6 +539,11 @@ object Strings {
         "Exported list of $count channels to:\n$path",
         "S-a exportat lista cu $count canale la:\n$path"
     )
+    val channelsCopyFailed get() = t(
+        "Kanal listesi TV'nin dahili hafızasına kopyalanamadı.",
+        "The channel list could not be copied to the TV's internal storage.",
+        "Lista de canale nu a putut fi copiată în memoria internă a televizorului."
+    )
 
     val sortSection get() = t("Kanal Sıralama", "Channel Sorting", "Sortare canale")
     val sortNumber get() = t("Numara", "Number", "Număr")

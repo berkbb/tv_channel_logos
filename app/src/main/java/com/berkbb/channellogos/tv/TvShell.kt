@@ -195,6 +195,15 @@ class TvShell(private val context: Context) : AutoCloseable {
         return response.output.trim().endsWith("copied")
     }
 
+    /**
+     * Copies the file [from] to [to] as the shell user (see [copyFolder]), creating [to]'s folder.
+     * Only [to] itself is replaced. Returns whether the copy finished.
+     */
+    fun copyFile(from: String, to: String): Boolean {
+        val response = withConnection { it.shell("mkdir -p '${to.substringBeforeLast('/')}' && cp '$from' '$to' && echo copied") }
+        return response.output.trim().endsWith("copied")
+    }
+
     fun exists(path: String): Boolean =
         withConnection { it.shell("[ -e '$path' ] && echo yes") }.output.trim() == "yes"
 

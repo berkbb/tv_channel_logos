@@ -785,14 +785,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return byChannel.size
     }
 
-    /**
-     * Folders for a backup on USB sticks: this app's own folder on each stick, which the app may
-     * write without any permission. Another TV running this app finds it at the same place.
-     */
-    private fun usbBackupTargets(): List<File> =
+    /** This app's own folder on each USB stick, which the app may write without any permission. */
+    private fun usbAppFolders(): List<File> =
         getApplication<Application>().getExternalFilesDirs(null).drop(1).filterNotNull()
             .filter { runCatching { android.os.Environment.getExternalStorageState(it) == android.os.Environment.MEDIA_MOUNTED }.getOrDefault(false) }
-            .map { File(it, LogoBackups.USB_FOLDER) }
+
+    /** Folders for a backup on USB sticks. Another TV running this app finds it at the same place. */
+    private fun usbBackupTargets(): List<File> = usbAppFolders().map { File(it, LogoBackups.USB_FOLDER) }
 
     /** Backups on USB sticks: in this app's folder there, or at a stick's top level (copied there with a computer). */
     private fun usbBackupSources(): List<File> {
@@ -859,40 +858,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_state.value.busy) return
         runTask(Strings.exportingChannels) {
             val channels = _state.value.channels
-            val suggestions = _state.value.suggestions
             if (channels.isEmpty()) return@runTask failure(Strings.noChannelsTitle)
+            val csv = ChannelCsv.build(channels, _state.value.suggestions).toByteArray(Charsets.UTF_8)
 
-            val csv = buildString {
-                append("Number,Name,Type,HasLogo,SuggestedLogo,SuggestedSource,Strength\n")
-                for (ch in channels) {
-                    val sug = suggestions[ch.id]
-                    val type = if (ch.isRadio) "Radio" else "TV"
-                    val hasLogo = if (ch.hasLogo) "Yes" else "No"
-                    val sugName = sug?.name?.replace("\"", "\"\"") ?: ""
-                    val sugSrc = sug?.source?.name ?: ""
-                    val sugStr = sug?.strength?.name ?: ""
-                    append("\"${ch.number}\",\"${ch.name.replace("\"", "\"\"")}\",\"$type\",\"$hasLogo\",\"$sugName\",\"$sugSrc\",\"$sugStr\"\n")
-                }
+            // On a USB stick: this app's folder there, beside (not inside) the backup folder, which
+            // every backup export replaces.
+            val usbFolder = usbAppFolders().firstOrNull()
+            if (usbFolder != null) {
+                val file = File(usbFolder, CSV_NAME)
+                file.writeBytes(csv)
+                return@runTask done(Strings.exportedChannels(channels.size, file.path))
             }
-
-            val usbTarget = usbBackupTargets().firstOrNull()
-            val targetFile = if (usbTarget != null) {
-                File(usbTarget, "channels.csv")
-            } else {
-                val dir = File(getApplication<Application>().filesDir, "export")
-                dir.mkdirs()
-                File(dir, "channels.csv")
-            }
-
-            targetFile.parentFile?.mkdirs()
-            targetFile.writeBytes(csv.toByteArray(Charsets.UTF_8))
-
-            if (usbTarget == null) {
-                shellLock.withLock {
-                    runCatching { shell.copyFolder(targetFile.parentFile!!.path, INTERNAL_BACKUP) }
-                }
-            }
-            done(Strings.exportedChannels(channels.size, targetFile.path))
+            // Written to app storage the shell user can read, then copied by it into shared storage as
+            // a single file; the logo backup there is never touched.
+            val staging = shell.stagingDirectory("csv-out").apply { mkdirs() }
+            val file = File(staging, CSV_NAME).apply { writeBytes(csv) }
+            val copied = shellLock.withLock { shell.copyFile(file.path, INTERNAL_CSV) }
+            staging.deleteRecursively()
+            if (!copied) return@runTask failure(Strings.channelsCopyFailed)
+            done(Strings.exportedChannels(channels.size, INTERNAL_CSV))
         }
     }
 
@@ -1157,6 +1141,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val TAG = "ChannelLogos"
         /** The backup in the TV's shared storage; it survives uninstalling the app. */
         private const val INTERNAL_BACKUP = "/sdcard/${LogoBackups.USB_FOLDER}"
+        private const val CSV_NAME = "ChannelLogos-channels.csv"
+        /** The exported channel list in the TV's shared storage, apart from [INTERNAL_BACKUP]. */
+        private const val INTERNAL_CSV = "/sdcard/Download/$CSV_NAME"
         /** Errors meaning the TV or shell user does not support or allow reading/writing channel logos. */
         private val NO_ACCESS_MARKERS = listOf(
             "ACCESS_ALL_EPG_DATA",

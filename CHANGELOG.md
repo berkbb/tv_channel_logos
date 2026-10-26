@@ -12,6 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Release packaging now produces only `channel-logos-v<version>-universal-release.apk`. The app's only native code is Compose's `androidx.graphics.path` (about 10 KB per ABI), so the per-ABI `arm64` / `arm32` / `x64` APKs saved only about 27 KB each. Installed versions keep updating: the in-app update falls back to the universal APK when no per-ABI APK is published.
 
+### Fixed
+- **Channel list export no longer deletes the logo backup**: without a USB stick, "Export Channel List (CSV)" replaced
+  the `/sdcard/ChannelLogosBackup` folder (the logo backup in the TV's internal storage) with a folder the copy could not
+  even read, so the backup was lost and no CSV arrived. The list is now copied as a single file to
+  `/sdcard/Download/ChannelLogos-channels.csv`; on a USB stick it goes to this app's folder there, beside the backup
+  folder instead of inside it. A failed copy now shows an error, and the message shows where the file really is.
+
+### Security
+- **Spreadsheet formulas in the channel list CSV**: cells starting with `=`, `+`, `-`, `@`, a tab or a carriage return
+  (channel names come from broadcasters) are prefixed with `'`, so a spreadsheet shows them as text instead of running them.
+
 ---
 
 ## [1.4.5] - 2026-10-19
