@@ -621,7 +621,7 @@ class IptvOrgSource(private val context: Context) {
     }
 }
 
-private const val USER_AGENT = "tv-channel-logos"
+internal const val USER_AGENT = "tv-channel-logos"
 
 /** Downloads [url], following redirects (logo hosts often redirect). */
 internal fun httpGet(url: String): ByteArray {

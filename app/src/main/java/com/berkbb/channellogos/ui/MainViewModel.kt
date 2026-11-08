@@ -244,7 +244,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(busy = true, status = Strings.downloadingUpdate(update.version, 0)) }
             val target = File(app.cacheDir, apk.name)
             val ok = withContext(Dispatchers.IO) {
-                runCatching { downloadApk(apk, target) { pct -> _state.update { it.copy(status = Strings.downloadingUpdate(update.version, pct)) } } }
+                runCatching { AppUpdateChecker.downloadApk(apk, target) { pct -> _state.update { it.copy(status = Strings.downloadingUpdate(update.version, pct)) } } }
                     .onFailure { Log.w(TAG, "Update download failed", it) }
                     .getOrDefault(false)
             }
@@ -260,45 +260,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     else Outcome(false, Strings.updateInstallFailedTitle, Strings.updateInstallFailed(""))
                 )
             }
-        }
-    }
-
-    /** Streams [apk] into a .part file and keeps it only when its SHA-256 (or size) matches the release. */
-    private fun downloadApk(apk: AppUpdateChecker.ApkAsset, target: File, onProgress: (Int) -> Unit): Boolean {
-        val part = File(target.parentFile, target.name + ".part")
-        val connection = (java.net.URL(apk.url).openConnection() as java.net.HttpURLConnection).apply {
-            instanceFollowRedirects = true
-            connectTimeout = 15_000
-            readTimeout = 30_000
-        }
-        try {
-            if (connection.responseCode != 200) return false
-            val total = connection.contentLengthLong.takeIf { it > 0 } ?: apk.size
-            val digest = java.security.MessageDigest.getInstance("SHA-256")
-            var done = 0L
-            var last = -1
-            connection.inputStream.use { input ->
-                part.outputStream().use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read == -1) break
-                        output.write(buffer, 0, read)
-                        digest.update(buffer, 0, read)
-                        done += read
-                        val pct = if (total > 0) ((done * 100) / total).toInt().coerceIn(0, 100) else 0
-                        if (pct != last) { last = pct; onProgress(pct) }
-                    }
-                }
-            }
-            val sha = digest.digest().joinToString("") { "%02x".format(it) }
-            val valid = if (apk.sha256 != null) sha == apk.sha256 else apk.size > 0 && done == apk.size
-            if (!valid) return false
-            target.delete()
-            return part.renameTo(target)
-        } finally {
-            connection.disconnect()
-            if (part.exists()) part.delete()
         }
     }
 
