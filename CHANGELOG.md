@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release packaging now produces only `channel-logos-v<version>-universal-release.apk`. The app's only native code is Compose's `androidx.graphics.path` (about 10 KB per ABI), so the per-ABI `arm64` / `arm32` / `x64` APKs saved only about 27 KB each. Installed versions keep updating: the in-app update falls back to the universal APK when no per-ABI APK is published.
 
 ### Fixed
+- **Update download during a GitHub regional outage**: on 2026-11-08 one GitHub region answered 504 for every
+  `github.com/…/releases/download/…` address for hours while `api.github.com` kept working, so About > Check for
+  Updates found the new version but could not download it. When the github.com download fails with an I/O error or
+  a 5xx answer, the app now fetches the same asset once more from its
+  `api.github.com/repos/berkbb/tv_channel_logos/releases/assets/<id>` address (`Accept: application/octet-stream`);
+  the SHA-256 (or size) check runs on whichever download succeeded, and a 404 is still a plain failure.
 - **Channel list export no longer deletes the logo backup**: without a USB stick, "Export Channel List (CSV)" replaced
   the `/sdcard/ChannelLogosBackup` folder (the logo backup in the TV's internal storage) with a folder the copy could not
   even read, so the backup was lost and no CSV arrived. The list is now copied as a single file to
