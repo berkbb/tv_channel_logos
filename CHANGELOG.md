@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [1.5.0] - 2026-11-20
 
 ### Added
 - **Configurable self-update interval, TV storage card, `Menu` key & confirmed reset:** Settings now lets you set startup update checks to `Off` / `Daily` / `Weekly` and reset app settings to defaults without touching logo backups; About displays internal TV storage (`StatFs`); pressing `Menu` on the remote opens Settings.
