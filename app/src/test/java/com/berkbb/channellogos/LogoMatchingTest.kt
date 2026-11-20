@@ -13,6 +13,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 class LogoMatchingTest {
 
@@ -162,5 +163,17 @@ class LogoMatchingTest {
         assertTrue(results.any { it.name.contains("spor", ignoreCase = true) || it.id.contains("spor") })
         val trtResults = LogoMatching.search("trt", catalogs)
         assertTrue(trtResults.any { it.name.contains("trt", ignoreCase = true) || it.id.contains("trt") })
+    }
+
+    @Test
+    fun candidateSourcePrefixesRemainAsciiUnderTurkishLocale() {
+        val original = Locale.getDefault()
+        Locale.setDefault(Locale.forLanguageTag("tr-TR"))
+        try {
+            assertEquals("iptv:https://i.imgur.com/tivibu2.png", LogoMatching.best("TİVİBU SPOR 2", catalogs)!!.id)
+            assertEquals("picons:tarimormanekrani", LogoMatching.best("TARIM ORMAN EKRANI HD", withPicons, serviceKey = "2BD_8_1")!!.id)
+        } finally {
+            Locale.setDefault(original)
+        }
     }
 }

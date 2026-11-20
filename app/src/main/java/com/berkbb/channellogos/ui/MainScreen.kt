@@ -3,6 +3,7 @@ package com.berkbb.channellogos.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -151,6 +152,14 @@ fun MainScreen(viewModel: MainViewModel) {
             .onPreviewKeyEvent { event ->
                 if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.nativeKeyEvent.keyCode) {
+                    android.view.KeyEvent.KEYCODE_MENU -> {
+                        if (!state.busy && !showSettings && !showAbout && !showBackups && !showHealthReport &&
+                            picking == null && quickMenu == null && showLogoInfo == null && confirming == null
+                        ) {
+                            showSettings = true
+                            return@onPreviewKeyEvent true
+                        }
+                    }
                     android.view.KeyEvent.KEYCODE_INFO,
                     android.view.KeyEvent.KEYCODE_GUIDE -> {
                         focusedChannel?.let {
@@ -390,6 +399,7 @@ fun MainScreen(viewModel: MainViewModel) {
             sourcesInfo = sourcesInfo,
             cacheSize = state.cacheSizeBytes,
             onClearCache = viewModel::clearCache,
+            onResetSettings = { confirming = Strings.confirmResetSettings to { showSettings = false; viewModel.resetSettings() } },
             onChange = viewModel::updateSettings,
             onDismiss = { showSettings = false }
         )
@@ -402,15 +412,17 @@ fun MainScreen(viewModel: MainViewModel) {
     else if (state.pendingWrite != null) WriteConfirmScreen(state.pendingWrite!!, viewModel, onWrite = viewModel::confirmWrite, onCancel = viewModel::cancelWrite)
     else if (state.pendingRestore != null) RestoreConfirmScreen(state.pendingRestore!!, viewModel, onRestore = viewModel::confirmRestore, onCancel = viewModel::cancelRestore)
     confirming?.let { (message, action) ->
+        val cancelFocus = remember { FocusRequester() }
         TvDialog(
             title = Strings.confirm,
             onDismiss = { confirming = null },
             maxWidth = 560.dp,
             footer = {
+                TvButton(Strings.no, modifier = Modifier.focusRequester(cancelFocus), onClick = { confirming = null })
                 TvButton(Strings.yes, primary = true, onClick = { confirming = null; action() })
-                TvButton(Strings.no, onClick = { confirming = null })
             }
         ) {
+            LaunchedEffect(message) { runCatching { cancelFocus.requestFocus() } }
             Text(message, color = TextPrimary, fontSize = 16.sp)
         }
     }
@@ -507,7 +519,15 @@ private fun InfoCard(
                 Box(Modifier.size(10.dp).background(dot, CircleShape))
                 Spacer(Modifier.width(8.dp))
             }
-            Text(value, color = valueColor, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(
+                value,
+                color = valueColor,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false).basicMarquee(iterations = 2)
+            )
             if (extra != null) {
                 Spacer(Modifier.width(8.dp))
                 Text(extra, color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -812,7 +832,8 @@ private fun ChannelRow(
                         if (channel.isRadio) Text("📻 ", fontSize = 14.sp)
                         Text(
                             channel.name, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Medium,
-                            maxLines = 2, overflow = TextOverflow.Ellipsis
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.basicMarquee(iterations = 2)
                         )
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1646,6 +1667,7 @@ private fun SettingsDialog(
     sourcesInfo: String,
     cacheSize: Long,
     onClearCache: () -> Unit,
+    onResetSettings: () -> Unit,
     onChange: (Settings) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1714,6 +1736,18 @@ private fun SettingsDialog(
         SettingRow(Strings.restartTvSetting, Strings.restartTvDesc) {
             TvButton(Strings.on, selected = settings.restartLiveTv, small = true, onClick = { onChange(settings.copy(restartLiveTv = true)) })
             TvButton(Strings.off, selected = !settings.restartLiveTv, small = true, onClick = { onChange(settings.copy(restartLiveTv = false)) })
+        }
+        SettingRow(Strings.updateCheckSetting, Strings.updateCheckDesc) {
+            for ((code, label) in listOf(
+                Settings.UPDATE_CHECK_OFF to Strings.updateCheckOff,
+                Settings.UPDATE_CHECK_DAILY to Strings.updateCheckDaily,
+                Settings.UPDATE_CHECK_WEEKLY to Strings.updateCheckWeekly
+            )) {
+                TvButton(label, selected = settings.updateCheckInterval == code, small = true, onClick = { onChange(settings.copy(updateCheckInterval = code)) })
+            }
+        }
+        SettingRow(Strings.resetSettingsTitle, Strings.resetSettingsDesc) {
+            TvButton(Strings.resetSettingsButton, small = true, onClick = onResetSettings)
         }
     }
 }
@@ -1793,10 +1827,24 @@ private fun AboutDialog(viewModel: MainViewModel, onDismiss: () -> Unit) {
             }
         }
         // Key facts as cards, as in Pitwall Updater's About window
+        val storage = remember { readDeviceStorage() }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             InfoCard(Strings.aboutDeveloperTitle, Strings.aboutDeveloper, Modifier.weight(1f))
             InfoCard(Strings.aboutWebsiteTitle, Strings.aboutWebsite, Modifier.weight(1.5f), valueColor = Color(0xFF64B5F6))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             InfoCard(Strings.aboutLicenseTitle, "GNU GPL-3.0", Modifier.weight(1f), valueColor = Green)
+            if (storage != null) {
+                InfoCard(
+                    Strings.aboutStorageTitle,
+                    Strings.aboutStorageValue(
+                        StorageFormat.formatBytes(storage.freeBytes, Strings.locale),
+                        StorageFormat.formatBytes(storage.totalBytes, Strings.locale),
+                        StorageFormat.usedPercent(storage.freeBytes, storage.totalBytes)
+                    ),
+                    Modifier.weight(1.5f)
+                )
+            }
         }
         // Two columns of cards: the body is wide on a TV and long lines are hard to read from the sofa.
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

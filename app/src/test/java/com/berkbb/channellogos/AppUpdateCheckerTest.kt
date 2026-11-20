@@ -1,6 +1,8 @@
 package com.berkbb.channellogos
 
+import com.berkbb.channellogos.settings.Settings
 import com.berkbb.channellogos.ui.AppUpdateChecker
+import com.berkbb.channellogos.ui.StorageFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -176,5 +178,30 @@ class AppUpdateCheckerTest {
         assertEquals(hex, AppUpdateChecker.parseSha256("sha256:$hex"))
         assertNull(AppUpdateChecker.parseSha256("md5:abc"))
         assertNull(AppUpdateChecker.parseSha256(null))
+    }
+
+    @Test
+    fun respectsUpdateScheduleCleansCachedApksAndFormatsStorage() {
+        val now = 1_700_000_000_000L
+        assertFalse(AppUpdateChecker.UpdateSchedule.shouldCheck(Settings.UPDATE_CHECK_OFF, 0L, now))
+        assertTrue(AppUpdateChecker.UpdateSchedule.shouldCheck(Settings.UPDATE_CHECK_DAILY, 0L, now))
+        assertFalse(AppUpdateChecker.UpdateSchedule.shouldCheck(Settings.UPDATE_CHECK_DAILY, now - 1_000L, now))
+        assertTrue(AppUpdateChecker.UpdateSchedule.shouldCheck(Settings.UPDATE_CHECK_DAILY, now - AppUpdateChecker.UpdateSchedule.DAILY_MS, now))
+        assertFalse(AppUpdateChecker.UpdateSchedule.shouldCheck(Settings.UPDATE_CHECK_WEEKLY, now - AppUpdateChecker.UpdateSchedule.DAILY_MS, now))
+        assertTrue(AppUpdateChecker.UpdateSchedule.shouldCheck(Settings.UPDATE_CHECK_WEEKLY, now - AppUpdateChecker.UpdateSchedule.WEEKLY_MS, now))
+
+        val dir = folder.newFolder()
+        val apk = File(dir, "channel-logos-v1.4.5-universal-release.apk").apply { writeText("a") }
+        val part = File(dir, "channel-logos-v1.4.5-universal-release.apk.part").apply { writeText("b") }
+        val logoCacheDir = File(dir, "picons").apply { mkdirs() }
+        val cachedLogo = File(logoCacheDir, "tr.png").apply { writeText("c") }
+        AppUpdateChecker.cleanCachedApks(dir)
+        assertFalse(apk.exists())
+        assertFalse(part.exists())
+        assertTrue(cachedLogo.exists())
+
+        assertEquals("0 MB", StorageFormat.formatBytes(0L, java.util.Locale.ROOT))
+        assertEquals("4.5 GB", StorageFormat.formatBytes(4_500_000_000L, java.util.Locale.ROOT))
+        assertEquals(75, StorageFormat.usedPercent(2_500_000_000L, 10_000_000_000L))
     }
 }

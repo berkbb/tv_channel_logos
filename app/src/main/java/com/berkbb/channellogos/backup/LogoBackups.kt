@@ -164,7 +164,7 @@ class LogoBackups(context: Context) {
             val expected = sums.readLines().mapNotNull { line ->
                 val hash = line.substringBefore(' ')
                 val name = line.substringAfter("  ", "")
-                if (hash.length == 64 && safeName(name)) name to hash.lowercase() else null
+                if (hash.length == 64 && safeName(name)) name to hash.lowercase(java.util.Locale.ROOT) else null
             }.toMap()
             val bad = expected.filter { (name, hash) ->
                 val file = File(folder, name)
@@ -192,7 +192,7 @@ class LogoBackups(context: Context) {
                     digest.update(buffer, 0, read)
                 }
             }
-            return digest.digest().joinToString("") { "%02x".format(it) }
+            return digest.digest().joinToString("") { String.format(java.util.Locale.ROOT, "%02x", it) }
         }
 
         /** A plain file name: no folders, no way out of the backup folder. */

@@ -170,7 +170,7 @@ object LogoMatching {
         LogoCandidate(LogoSource.TV, key, strength, "tv:${entry.value}", entry.tier)
 
     private fun linkCandidate(source: LogoSource, entry: LogoEntry<String>, strength: NameMatcher.Strength) =
-        LogoCandidate(source, entry.value, strength, "${source.name.lowercase()}:${entry.value}", entry.tier)
+        LogoCandidate(source, entry.value, strength, "${source.name.lowercase(java.util.Locale.ROOT)}:${entry.value}", entry.tier)
 
     private fun distance(key: String, base: String) = kotlin.math.abs(key.length - base.length)
 

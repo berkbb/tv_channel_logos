@@ -22,7 +22,9 @@ data class Settings(
     /** Force-stop Live TV app after writing so logos refresh immediately without TV reboot. */
     val restartLiveTv: Boolean = true,
     /** Channels hidden from the missing logos view. */
-    val ignoredChannels: Set<Long> = emptySet()
+    val ignoredChannels: Set<Long> = emptySet(),
+    /** "off", "daily" or "weekly". */
+    val updateCheckInterval: String = UPDATE_CHECK_DAILY
 ) {
     /** The settings as "key" → "value", for a backup file; [fromMap] reads them back. */
     fun toMap(): Map<String, String> = mapOf(
@@ -36,7 +38,8 @@ data class Settings(
         "source_usb" to usb.toString(),
         "picons_style" to piconsStyle,
         "restart_live_tv" to restartLiveTv.toString(),
-        "ignored_channels" to ignoredChannels.joinToString(",")
+        "ignored_channels" to ignoredChannels.joinToString(","),
+        "update_check_interval" to updateCheckInterval
     )
 
     companion object {
@@ -55,7 +58,8 @@ data class Settings(
                 usb = flag("source_usb", defaults.usb),
                 piconsStyle = map["picons_style"]?.takeIf { it in listOf(PICONS_STYLE_DEFAULT, PICONS_STYLE_LIGHT, PICONS_STYLE_DARK) } ?: defaults.piconsStyle,
                 restartLiveTv = flag("restart_live_tv", defaults.restartLiveTv),
-                ignoredChannels = map["ignored_channels"]?.split(",")?.mapNotNull { it.trim().toLongOrNull() }?.toSet() ?: defaults.ignoredChannels
+                ignoredChannels = map["ignored_channels"]?.split(",")?.mapNotNull { it.trim().toLongOrNull() }?.toSet() ?: defaults.ignoredChannels,
+                updateCheckInterval = map["update_check_interval"]?.takeIf { it in listOf(UPDATE_CHECK_OFF, UPDATE_CHECK_DAILY, UPDATE_CHECK_WEEKLY) } ?: defaults.updateCheckInterval
             )
         }
 
@@ -66,6 +70,9 @@ data class Settings(
         const val PICONS_STYLE_DEFAULT = "default"
         const val PICONS_STYLE_LIGHT = "light"
         const val PICONS_STYLE_DARK = "dark"
+        const val UPDATE_CHECK_OFF = "off"
+        const val UPDATE_CHECK_DAILY = "daily"
+        const val UPDATE_CHECK_WEEKLY = "weekly"
     }
 }
 
@@ -83,7 +90,10 @@ class SettingsStore(context: Context) {
         usb = prefs.getBoolean("source_usb", true),
         piconsStyle = prefs.getString("picons_style", Settings.PICONS_STYLE_DEFAULT) ?: Settings.PICONS_STYLE_DEFAULT,
         restartLiveTv = prefs.getBoolean("restart_live_tv", true),
-        ignoredChannels = prefs.getString("ignored_channels", "")?.split(",")?.mapNotNull { it.trim().toLongOrNull() }?.toSet() ?: emptySet()
+        ignoredChannels = prefs.getString("ignored_channels", "")?.split(",")?.mapNotNull { it.trim().toLongOrNull() }?.toSet() ?: emptySet(),
+        updateCheckInterval = prefs.getString("update_check_interval", Settings.UPDATE_CHECK_DAILY)
+            ?.takeIf { it in listOf(Settings.UPDATE_CHECK_OFF, Settings.UPDATE_CHECK_DAILY, Settings.UPDATE_CHECK_WEEKLY) }
+            ?: Settings.UPDATE_CHECK_DAILY
     )
 
     fun save(settings: Settings) = prefs.edit {
@@ -98,5 +108,10 @@ class SettingsStore(context: Context) {
         putString("picons_style", settings.piconsStyle)
         putBoolean("restart_live_tv", settings.restartLiveTv)
         putString("ignored_channels", settings.ignoredChannels.joinToString(","))
+        putString("update_check_interval", settings.updateCheckInterval)
     }
+
+    fun loadLastUpdateCheckMs(): Long = prefs.getLong("last_update_check_ms", 0L)
+
+    fun saveLastUpdateCheckMs(ms: Long) = prefs.edit { putLong("last_update_check_ms", ms) }
 }

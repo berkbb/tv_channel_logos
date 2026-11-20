@@ -29,7 +29,7 @@ internal fun serviceKey(onid: String?, tsid: String?, sid: String?): String? {
     val ids = listOf(sid, tsid, onid).map { it?.toIntOrNull() ?: 0 }
     // Analogue and IP channels have no service or original network ID (0 in the provider).
     if (ids[0] <= 0 || ids[2] <= 0) return null
-    return ids.joinToString("_") { Integer.toHexString(it).uppercase() }
+    return ids.joinToString("_") { Integer.toHexString(it).uppercase(java.util.Locale.ROOT) }
 }
 
 /**

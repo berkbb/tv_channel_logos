@@ -205,6 +205,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         Strings.setLanguage(_state.value.settings.language)
+        viewModelScope.launch(Dispatchers.IO) {
+            AppUpdateChecker.cleanCachedApks(getApplication<Application>().cacheDir)
+        }
         refreshCacheSize()
         start()
         viewModelScope.launch {
@@ -316,7 +319,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(outcome = error ?: noChannelsWarning(it)) }
             }
             refreshIptvInBackground()
-            checkForUpdates(manual = false)
+            val settings = _state.value.settings
+            if (AppUpdateChecker.UpdateSchedule.shouldCheck(
+                    settings.updateCheckInterval,
+                    settingsStore.loadLastUpdateCheckMs(),
+                    System.currentTimeMillis()
+                )
+            ) {
+                checkForUpdates(manual = false)
+            }
         }
     }
 
@@ -337,6 +348,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             val status = result.fold(
                 onSuccess = { check ->
+                    settingsStore.saveLastUpdateCheckMs(System.currentTimeMillis())
                     if (check.hasUpdate) UpdateStatus.Available(check.latestVersion, check.htmlUrl, check.apk)
                     else UpdateStatus.UpToDate(check.latestVersion)
                 },
@@ -552,6 +564,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun resetIgnored() {
         updateSettings(_state.value.settings.copy(ignoredChannels = emptySet()))
+    }
+
+    /** Restores app settings to defaults while preserving logo backups on the TV. */
+    fun resetSettings() {
+        updateSettings(Settings())
     }
 
     /** Every image on USB sticks and in the TV's storage for [channel], those named like it first. */

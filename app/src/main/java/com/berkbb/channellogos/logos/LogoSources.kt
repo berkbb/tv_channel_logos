@@ -346,7 +346,7 @@ class PiconsSource(private val context: Context) {
         internal fun servicesFor(references: List<Pair<String, String>>, preferredNamespaces: Collection<String>): Map<String, String> {
             val byIds = LinkedHashMap<String, MutableList<Pair<String, String>>>()
             for ((reference, logo) in references) {
-                val parts = reference.uppercase().split('_')
+                val parts = reference.uppercase(java.util.Locale.ROOT).split('_')
                 if (parts.size != 4) continue
                 byIds.getOrPut("${parts[0]}_${parts[1]}_${parts[2]}") { ArrayList() } += parts[3] to logo
             }
@@ -386,7 +386,7 @@ class FileLogoSource {
         all.clear()
         for (place in places()) collect(place.dir, depth = 0)
         // Stable sort: for the same name a stick's file stays ahead of the TV's and wins the key.
-        all.sortBy { it.name.lowercase() }
+        all.sortBy { it.name.lowercase(java.util.Locale.ROOT) }
         for (file in all) {
             for (key in NameMatcher.logoKeys(file.nameWithoutExtension)) byKey.putIfAbsent(key, LogoEntry(file.path, LogoEntry.COUNTRY))
         }
@@ -417,8 +417,8 @@ class FileLogoSource {
     /** One folder for browsing: its folders, then its images, each by name. */
     fun browse(dir: File): List<File> {
         val entries = dir.listFiles().orEmpty()
-        val folders = entries.filter { it.isDirectory && isBrowsedFolder(it.name) }.sortedBy { it.name.lowercase() }
-        val images = entries.filter { it.isFile && isLogoFile(it.name) }.sortedBy { it.name.lowercase() }
+        val folders = entries.filter { it.isDirectory && isBrowsedFolder(it.name) }.sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
+        val images = entries.filter { it.isFile && isLogoFile(it.name) }.sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
         return folders + images
     }
 
@@ -440,7 +440,7 @@ class FileLogoSource {
          * to every file it copies, which is no image but has the same key as the real logo.
          */
         fun isLogoFile(name: String): Boolean =
-            !name.startsWith(".") && name.substringAfterLast('.', "").lowercase() in EXTENSIONS
+            !name.startsWith(".") && name.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT) in EXTENSIONS
 
         /**
          * A folder that may hold the user's logos. Hidden folders, apps' data ("Android", where this
@@ -554,7 +554,7 @@ class IptvOrgSource(private val context: Context) {
                     }
                 }
                 reader.endObject()
-                if (channel != null && url != null && feed == null && format?.uppercase() != "SVG") logos.putIfAbsent(channel, url)
+                if (channel != null && url != null && feed == null && format?.uppercase(java.util.Locale.ROOT) != "SVG") logos.putIfAbsent(channel, url)
             }
             reader.endArray()
         }

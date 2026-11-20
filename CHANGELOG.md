@@ -9,10 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Configurable self-update interval, TV storage card, `Menu` key & confirmed reset:** Settings now lets you set startup update checks to `Off` / `Daily` / `Weekly` and reset app settings to defaults without touching logo backups; About displays internal TV storage (`StatFs`); pressing `Menu` on the remote opens Settings.
+
 ### Changed
+- **Cancel-first confirmations, bounded channel marquee & APK cache cleanup:** Confirmation dialogs now focus Cancel by default for safety, long channel names use a 2-pass `basicMarquee`, and downloaded self-update `.apk` / `.apk.part` files in cache are cleaned on startup and after an update (preserving logo caches).
 - Release packaging now produces only `channel-logos-v<version>-universal-release.apk`. The app's only native code is Compose's `androidx.graphics.path` (about 10 KB per ABI), so the per-ABI `arm64` / `arm32` / `x64` APKs saved only about 27 KB each. Installed versions keep updating: the in-app update falls back to the universal APK when no per-ABI APK is published.
 
 ### Fixed
+- **`Locale.ROOT` Turkish-locale safety:** Lowercasing/uppercasing for candidate source IDs (`iptv:`, `picons:`), file extensions, service references, and hex digests now use `Locale.ROOT` so `IPTV`/`PICONS` do not turn into `ıptv`/`pıcons` on Turkish TVs.
 - **Update download during a GitHub regional outage**: on 2026-11-08 one GitHub region answered 504 for every
   `github.com/…/releases/download/…` address for hours while `api.github.com` kept working, so About > Check for
   Updates found the new version but could not download it. When the github.com download fails with an I/O error or

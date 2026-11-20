@@ -607,4 +607,38 @@ object Strings {
         "Use >> / << remote keys to jump between letter groups.",
         "Folosiți tastele >> / << de pe telecomandă pentru a sări între litere."
     )
+
+    val updateCheckSetting get() = t(
+        "Otomatik Güncelleme Denetimi",
+        "Automatic Update Check",
+        "Verificare automată actualizări"
+    )
+    val updateCheckDesc get() = t(
+        "Uygulama açıldığında GitHub'da yeni sürüm olup olmadığını sessizce denetler.",
+        "Quietly checks GitHub for a newer release when the app starts.",
+        "Verifică silențios pe GitHub dacă există o versiune nouă la pornirea aplicației."
+    )
+    val updateCheckOff get() = t("Kapalı", "Off", "Oprit")
+    val updateCheckDaily get() = t("Günlük", "Daily", "Zilnic")
+    val updateCheckWeekly get() = t("Haftalık", "Weekly", "Săptămânal")
+
+    val resetSettingsTitle get() = t("Ayarları Sıfırla", "Reset Settings", "Resetează setările")
+    val resetSettingsDesc get() = t(
+        "Dil, tema ve kaynak seçimlerini varsayılana döndürür; logo yedekleri korunur.",
+        "Restores language, theme and source choices to defaults; logo backups are kept.",
+        "Readuce limba, tema și sursele la valorile implicite; copiile de sigle sunt păstrate."
+    )
+    val resetSettingsButton get() = t("Varsayılanlara Sıfırla", "Reset to Defaults", "Resetează la implicit")
+    val confirmResetSettings get() = t(
+        "Tüm uygulama ayarları varsayılanlarına dönecek. Logo yedekleriniz korunacaktır.",
+        "All app settings will return to their default values. Your logo backups will be kept.",
+        "Toate setările aplicației vor reveni la valorile implicite. Copiile dvs. de siguranță vor fi păstrate."
+    )
+
+    val aboutStorageTitle get() = t("TV Depolama Alanı", "TV Storage", "Stocare TV")
+    fun aboutStorageValue(free: String, total: String, percentUsed: Int) = t(
+        "$free boş / $total (%$percentUsed dolu)",
+        "$free free / $total ($percentUsed% used)",
+        "$free liber / $total ($percentUsed% utilizat)"
+    )
 }

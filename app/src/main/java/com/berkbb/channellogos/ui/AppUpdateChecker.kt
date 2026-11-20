@@ -2,18 +2,44 @@ package com.berkbb.channellogos.ui
 
 import com.berkbb.channellogos.logos.USER_AGENT
 import com.berkbb.channellogos.logos.httpGet
+import com.berkbb.channellogos.settings.Settings
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.Locale
 
 object AppUpdateChecker {
     private const val REPO = "berkbb/tv_channel_logos"
     private const val RELEASE_API_URL = "https://api.github.com/repos/$REPO/releases/latest"
     /** Only an asset address under this prefix (the release's `url` field) is used as the fallback download. */
     private const val ASSET_API_PREFIX = "https://api.github.com/repos/$REPO/releases/assets/"
+
+    object UpdateSchedule {
+        const val DAILY_MS = 86_400_000L
+        const val WEEKLY_MS = 7 * 86_400_000L
+
+        fun shouldCheck(interval: String, lastCheckedMs: Long, nowMs: Long): Boolean {
+            val period = when (interval) {
+                Settings.UPDATE_CHECK_OFF -> return false
+                Settings.UPDATE_CHECK_WEEKLY -> WEEKLY_MS
+                else -> DAILY_MS
+            }
+            if (lastCheckedMs <= 0L || nowMs < lastCheckedMs) return true
+            return nowMs - lastCheckedMs >= period
+        }
+    }
+
+    /** Removes downloaded self-update APK files from [cacheDir] without touching logo caches. */
+    fun cleanCachedApks(cacheDir: File) {
+        cacheDir.listFiles()?.forEach { file ->
+            if (file.isFile && (file.name.endsWith(".apk") || file.name.endsWith(".apk.part"))) {
+                file.delete()
+            }
+        }
+    }
 
     data class CheckResult(
         val latestVersion: String,
@@ -147,7 +173,7 @@ object AppUpdateChecker {
                     }
                 }
             }
-            return Fetched(code, digest.digest().joinToString("") { "%02x".format(it) }, done)
+            return Fetched(code, digest.digest().joinToString("") { String.format(Locale.ROOT, "%02x", it) }, done)
         } finally {
             connection.disconnect()
         }
@@ -165,7 +191,7 @@ object AppUpdateChecker {
 
     /** "sha256:abc…" (GitHub's asset digest) as lowercase hex, or null. */
     internal fun parseSha256(digest: String?): String? {
-        val value = digest?.trim()?.lowercase() ?: return null
+        val value = digest?.trim()?.lowercase(Locale.ROOT) ?: return null
         val hex = value.removePrefix("sha256:")
         return if (value.startsWith("sha256:") && hex.length == 64 && hex.all { it in "0123456789abcdef" }) hex else null
     }

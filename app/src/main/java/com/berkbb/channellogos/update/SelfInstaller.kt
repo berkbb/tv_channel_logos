@@ -105,6 +105,7 @@ class RestartAfterUpdateReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        com.berkbb.channellogos.ui.AppUpdateChecker.cleanCachedApks(context.cacheDir)
         if (!prefs(context).getBoolean(KEY_PENDING, false)) return
         disarm(context)
         runCatching {
